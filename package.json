@@ -1,0 +1,29 @@
+{
+  "name": "huishouden-connector",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "lint": "tsc --noEmit && tsc --noEmit -p test",
+    "test": "bun scripts/rules.ts && firebase emulators:exec --only firestore,auth --project demo-huishouden-connector \"TZ=UTC bun test test/unit test/auth test/tools\"",
+    "e2e": "bun scripts/rules.ts && firebase emulators:exec --only firestore,auth --project demo-huishouden-connector \"TZ=UTC bun test --timeout 60000 test/e2e\"",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --env \"\"",
+    "deploy:staging": "wrangler deploy --env staging",
+    "prepare": "git config core.hooksPath .githooks || true"
+  },
+  "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "@cloudflare/workers-oauth-provider": "1.2.1",
+    "@huishouden/pwa-kit": "github:huishouden/pwa-kit#v0.65.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261004.1",
+    "@types/bun": "latest",
+    "firebase-tools": "^15.32.1",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.147.0"
+  }
+}

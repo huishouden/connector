@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+dist/
+*.key.json
+test/.rules/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
