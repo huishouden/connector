@@ -31,6 +31,12 @@ const es: Record<keyof typeof en, string> = {
   'households.settings': 'Respuestas en {lang}, horas en {zone}.',
   'households.portal': 'Portal: {url}',
 
+  'household.title': 'Casa',
+  'household.address': 'Dirección: {address}',
+  'household.approximate': 'Aproximada: el hogar compartió su barrio, no la casa.',
+  'household.zone': 'Zona horaria del hogar: {zone}',
+  'household.noHome': 'Aún no hay casa. Un administrador o miembro puede añadirla en el portal: {url}',
+
   'today.title': 'Hoy, {day}',
   'today.overdue': 'Atrasado',
   'today.today': 'Hoy',

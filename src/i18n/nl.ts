@@ -31,6 +31,12 @@ const nl: Record<keyof typeof en, string> = {
   'households.settings': 'Antwoorden in het {lang}, tijden in {zone}.',
   'households.portal': 'Portaal: {url}',
 
+  'household.title': 'Thuis',
+  'household.address': 'Adres: {address}',
+  'household.approximate': 'Bij benadering: het huishouden deelde de buurt, niet het huis.',
+  'household.zone': 'Tijdzone van het huishouden: {zone}',
+  'household.noHome': 'Er is nog geen thuisadres. Een beheerder of lid kan het toevoegen in het portaal: {url}',
+
   'today.title': 'Vandaag, {day}',
   'today.overdue': 'Te laat',
   'today.today': 'Vandaag',

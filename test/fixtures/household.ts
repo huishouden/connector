@@ -23,12 +23,14 @@ export const MALLORY = 'mallory@example.com'; // in another household only
 export const PEOPLE = [ALICE, BOB, CAROL, HELEN, KIM, MALLORY];
 
 const H = 'households/h1';
+/** An invented address. */
+export const HOME = { address: '12 Example Lane, Springfield, Illinois 62701', lat: 39.7817, lng: -89.6501, timeZone: 'America/Chicago', setBy: ALICE, updatedAt: NOW - 30 * DAY };
 const URL = 'https://huishouden-staging.web.app';
 
 /** Document path → data, written with the emulator's owner token (rules bypassed). */
 export function householdDocs(): Record<string, Record<string, unknown>> {
   return {
-    [H]: { name: 'Maple Street', members: [ALICE, BOB, CAROL, HELEN, KIM], joined: [ALICE, BOB, CAROL, HELEN, KIM], roles: { [HELEN]: 'helper', [KIM]: 'kid' }, createdAt: 1, currency: 'USD' },
+    [H]: { name: 'Maple Street', members: [ALICE, BOB, CAROL, HELEN, KIM], joined: [ALICE, BOB, CAROL, HELEN, KIM], roles: { [HELEN]: 'helper', [KIM]: 'kid' }, createdAt: 1, currency: 'USD', home: HOME },
     'households/h2': { name: 'Elsewhere', members: [MALLORY], joined: [MALLORY], createdAt: 1 },
     [`${H}/profiles/${ALICE}`]: { name: 'Alice Example', lang: 'en', timeZone: ZONE, updatedAt: 1 },
     [`${H}/profiles/${BOB}`]: { name: 'Bob Example', lang: 'nl', timeZone: ZONE, updatedAt: 1 },
