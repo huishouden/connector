@@ -1,0 +1,91 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { ALICE, CAROL, HELEN, KIM, NOW } from '../fixtures/household';
+import { call, connect, read, seed, type Connected } from '../helpers';
+
+let alice: Connected, helen: Connected, kim: Connected, carol: Connected;
+beforeAll(async () => {
+  await seed();
+  [alice, helen, kim, carol] = await Promise.all([ALICE, HELEN, KIM, CAROL].map((e) => connect(e)));
+});
+afterAll(async () => {
+  for (const c of [alice, helen, kim, carol]) await c.close();
+});
+
+describe('pet', () => {
+  test("pet_today: meals fed or due, the heartworm chew due today, today's ear drops", async () => {
+    const r = await call(alice, 'pet_today');
+    const biscuit = r.data.pets[0];
+    expect(biscuit.meals).toEqual([
+      expect.objectContaining({ name: 'Breakfast', state: 'fed', fed_by: HELEN }),
+      expect.objectContaining({ name: 'Dinner', state: 'due' }),
+    ]);
+    expect(biscuit.reminders).toEqual([expect.objectContaining({ id: 'r1', state: 'today', medicine: true })]);
+    expect(biscuit.courses[0].slots.map((s: { state: string }) => s.state)).toEqual(['missed', 'due']);
+  });
+
+  test("pet_log_feeding ticks the next unfed meal as the person", async () => {
+    const r = await call(kim, 'pet_log_feeding', { pet: 'biscuit' });
+    expect(r.isError).toBe(false);
+    expect(r.data.meal).toBe('p1-pm');
+    expect((await read(`households/h1/petFeedings/${r.data.id}`))!.data).toMatchObject({ petId: 'p1', mealId: 'p1-pm', by: 'kim@example.com', via: 'assistant', at: NOW });
+  });
+
+  test('pet_log_dose: the reminder moves on a month; a course slot once; kids never', async () => {
+    expect((await call(kim, 'pet_log_dose', { pet: 'Biscuit', medicine: 'Heartworm chew' })).isError).toBe(true);
+    const r = await call(helen, 'pet_log_dose', { pet: 'Biscuit', medicine: 'heartworm' });
+    expect(r.isError).toBe(false);
+    expect((await read('households/h1/petReminders/r1'))!.data).toMatchObject({ due: '2031-02-07', lastDoneAt: NOW });
+    expect((await read(`households/h1/petDoses/${r.data.id}`))!.data).toMatchObject({ reminderId: 'r1', by: HELEN, via: 'assistant' });
+    const drops = await call(helen, 'pet_log_dose', { pet: 'Biscuit', medicine: 'Ear drops', time: '08:00' });
+    expect(drops.data).toMatchObject({ course: 'c1', slot: 0 });
+    const again = await call(helen, 'pet_log_dose', { pet: 'Biscuit', medicine: 'Ear drops', time: '08:00' });
+    expect(again.data).toMatchObject({ written: false, needs_confirmation: true });
+  });
+});
+
+describe('home', () => {
+  test('home_upkeep_due: the overdue filter and this week\'s trash pickup', async () => {
+    const r = await call(carol, 'home_upkeep_due', { days: 7 });
+    expect(r.data.jobs).toEqual([expect.objectContaining({ id: 'j1', overdue: true, todo_id: 'home:job:j1' })]);
+    expect(r.data.events.map((e: { date: string }) => e.date)).toEqual(['2031-01-09']);
+  });
+
+  test('home_add_event: a regular event on a rule, and a booked visit', async () => {
+    const r = await call(helen, 'home_add_event', { type: 'regular', title: 'Recycling', kind: 'recycling', start: '2031-01-07', frequency: 'week', every: 2, weekdays: ['tuesday'] });
+    expect(r.isError).toBe(false);
+    expect((await read(`households/h1/homeEvents/${r.data.id}`))!.data).toMatchObject({ title: 'Recycling', kind: 'recycling', rule: { freq: 'week', every: 2, start: '2031-01-07' }, by: HELEN, via: 'assistant' });
+    const m = await call(alice, 'home_add_event', { type: 'regular', title: 'HOA meeting', kind: 'hoa', start: '2031-01-27', frequency: 'month', nth_weekday: { nth: -1, weekday: 'monday' }, time: '19:00' });
+    expect(m.data.rule).toMatchObject({ freq: 'month', nth: -1, weekday: 1 });
+    const v = await call(alice, 'home_add_event', { type: 'visit', title: 'Plumber: kitchen sink', start: '2031-01-14', who: 'Example Plumbing', cost: 180 });
+    expect((await read(`households/h1/homeServiceLog/${v.data.id}`))!.data).toMatchObject({ date: '2031-01-14', who: 'Example Plumbing', costCents: 18000 });
+  });
+});
+
+describe('appointments and contacts', () => {
+  test('pet, baby and car appointments in their apps; private only for admins and members', async () => {
+    const p = await call(helen, 'add_appointment', { app: 'pet', title: 'Grooming', start: '2031-01-12T10:30', pet_kind: 'grooming' });
+    expect((await read(`households/h1/petAppointments/${p.data.id}`))!.data).toMatchObject({ petIds: ['p1'], kind: 'grooming', at: Date.parse('2031-01-12T10:30:00-05:00'), private: false, by: HELEN });
+    expect((await call(helen, 'add_appointment', { app: 'baby', title: 'Checkup', start: '2031-01-12T10:30', private: true })).isError).toBe(true);
+    const b = await call(alice, 'add_appointment', { app: 'baby', title: 'Checkup', start: '2031-01-12', private: true });
+    expect((await read(`households/h1/babyAppointments/${b.data.id}`))!.data).toMatchObject({ private: true });
+    const c = await call(alice, 'add_appointment', { app: 'car', title: 'Oil change', start: '2031-01-20T09:00', vehicle: 'blue wagon', location: 'Example Garage' });
+    expect((await read(`households/h1/carAppointments/${c.data.id}`))!.data).toMatchObject({ vehicleId: 'v1', location: 'Example Garage' });
+  });
+
+  test("a health appointment goes on the calendars of the person's carers and the admins only", async () => {
+    const r = await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Cardiology follow-up', start: '2031-01-15T11:00' });
+    expect(r.isError).toBe(false);
+    expect((await read(`households/h1/personalAgenda/${r.data.id}`))!.data).toMatchObject({ app: 'assistant', kind: 'appointment', audience: ['alice@example.com', 'bob@example.com', 'helen@example.com'], private: true, who: 'Nan' });
+    expect((await call(carol, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
+    expect((await call(kim, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
+  });
+
+  test('contacts: helpers search only open contacts and add open ones', async () => {
+    expect((await call(alice, 'contacts_search', { query: 'lawyer' })).data.contacts).toHaveLength(1);
+    expect((await call(helen, 'contacts_search', { query: 'lawyer' })).data.contacts).toHaveLength(0);
+    expect((await call(helen, 'contacts_search', { app: 'health' })).data.contacts.map((c: { name: string }) => c.name)).toEqual(['Corner Pharmacy', 'Dr. Example']);
+    const r = await call(helen, 'contacts_add', { name: 'Example Vet Clinic', role: 'Vet', phone: '555-0123', website: 'example.com', apps: ['pet'] });
+    expect((await read(`households/h1/contacts/${r.data.id}`))!.data).toMatchObject({ name: 'Example Vet Clinic', website: 'https://example.com', apps: ['pet'], private: false, by: HELEN, via: 'assistant' });
+    expect((await call(helen, 'contacts_add', { name: 'Secret', apps: ['home'], private: true })).isError).toBe(true);
+  });
+});

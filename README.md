@@ -1,0 +1,149 @@
+# Huishouden connector
+
+The connector is a remote [MCP](https://modelcontextprotocol.io) server. People add it to their own AI assistant (Claude,
+ChatGPT, Gemini CLI or any MCP client) to use their Huishouden household from there. They can ask
+"what's on today?", add groceries, log a pet's feed or a medicine dose, see upcoming bills, or look
+up the medicines of someone they care for and research them in the assistant.
+
+The connector is free, it works for any household, and each person approves it for themselves. The
+household's own Firestore rules decide everything it can do, because it acts **as the signed-in
+person**. It never uses a service account.
+
+- MCP endpoint: `https://huishouden-connector.<account>.workers.dev/mcp` (Streamable HTTP).
+  Staging runs at `huishouden-connector-staging.<account>.workers.dev`, against the
+  `huishouden-staging` project.
+- How to add it: the portal's **Use with your AI assistant** page (`/assistant`, in every app's
+  account menu) shows the exact address and the steps for Claude, ChatGPT and Gemini CLI, in
+  English, Spanish and Dutch.
+
+## Tools
+
+Every tool takes an optional `household` (the default is the one the apps open), `lang` (`en`, `es`
+or `nl`; the default is the person's Huishouden language) and `time_zone` (the default is the one in
+their profile). Answers are short Markdown in that language, with deep links into the apps. They
+also come back as structured data. Writing tools take an optional `idempotency_key`: a retry with the
+same key writes nothing new.
+
+| Tool | Does |
+|---|---|
+| `households` | Who is signed in, their households and their role in each, language and time zone |
+| `today` | Today's agenda (overdue, today, next 48 hours) and open to-dos, as the portal shows them |
+| `calendar` | The household calendar between two days, by day |
+| `todos` | Open to-dos from every app, with ids, filters and sorts, and whether this person may act on each |
+| `todo_done`, `todo_cancel` | Run a to-do's Done or Cancel action exactly as the portal does (kit `todoActionOps` and `planTodo`) |
+| `groceries_list`, `groceries_add`, `groceries_check` | Shopping lists, in the Groceries app's shapes (including staples) |
+| `tasks_add` | A task, with an optional due date or time |
+| `bills_due` | Open bills, amounts, due dates, autopay and pay links (admins and members only) |
+| `pet_today`, `pet_log_feeding`, `pet_log_dose` | The feeding board, care reminders and medicine courses; logging as the Pet app does |
+| `home_upkeep_due`, `home_add_event` | Upkeep jobs due and regular events; a new regular event (EventRule) or a booked visit |
+| `add_appointment` | Pet, baby, car, or health (on the calendars of the person's carers and the admins only) |
+| `contacts_search`, `contacts_add` | The household's shared contacts |
+| `health_people` | The people this person looks after in Health |
+| `health_medicines` | Strength, dose, schedule, prescriber, pharmacy, supply and days left, refills, notes, allergies |
+| `health_history` | Given, missed and skipped doses, and adherence per medicine and overall |
+| `health_due` | Today's doses, as-needed availability, refills running low |
+| `health_log_dose` | Given or skipped, with Health's double-dose and as-needed guards (it asks before overriding) |
+| `health_add_medicine`, `health_update_medicine` | Add or change a medicine, stop or restart it, count the supply, mark a refill ordered |
+| `health_doctor_list` | Health's printable medicine list, as Markdown |
+
+There are no delete tools. Every Health answer ends with a one-line note: these are the
+household's own records, not medical advice.
+
+## How sign-in works
+
+The connector speaks OAuth 2.1 as MCP clients expect: discovery (RFC 9728 and RFC 8414), dynamic
+client registration and Client ID Metadata Documents, PKCE (S256), and refresh tokens. All of this
+comes from [`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider).
+The identity step happens on Huishouden's own site, through the same Google sign-in as every app, so
+there is no OAuth client to configure and no redirect URI to register.
+
+1. `GET /authorize` shows the connector's consent page: which app is asking, where access goes, and
+   a warning for local apps. The page can't be framed and is bound to the browser.
+2. **Continue** sends the browser to the portal's `/connect` page, with a state bound to that
+   browser.
+3. The portal signs the person in with Google (Firebase Auth) and asks them to confirm. On Allow it
+   posts their Firebase refresh token to `/connect/hand-off`, from the portal's origin only. The
+   connector checks the token with Firebase Auth and keeps it for two minutes under a one-time
+   code, encrypted with a key only that code derives.
+4. The portal sends the browser to `/connect/callback`. The connector takes the hand-off back once,
+   for that state, and completes the grant. The refresh token goes into the grant's props, which
+   workers-oauth-provider stores in Workers KV encrypted with a key that only the client's tokens
+   unwrap.
+5. On each tool call, the refresh token buys a fresh ID token (cached per isolate). Firestore REST
+   is called with that ID token, so the rules apply exactly as in the apps. Each OAuth refresh also
+   checks the Firebase sign-in still stands. When it doesn't, the grant ends and the assistant asks
+   the person to connect again.
+
+The browser and server halves are reusable kit modules, documented in
+[pwa-kit docs/server.md](https://github.com/huishouden/pwa-kit/blob/main/docs/server.md):
+
+| Module | Provides |
+|---|---|
+| `@huishouden/pwa-kit/signin-handoff` | The portal's /connect flow |
+| `@huishouden/pwa-kit/firebase-auth-rest` | Refresh token to ID token; verifying a portal ID token |
+| `@huishouden/pwa-kit/firestore-rest` | Firestore as the person: get, query, atomic commit |
+| `@huishouden/pwa-kit/local-clock` | The person's days on a UTC server |
+| `@huishouden/pwa-kit/todo-core`, `/agenda-core`, `/contact-core`, `/role-core`, `/dose`, `/schedule` | The data contracts and app logic |
+
+The calendar feed reuses the same modules.
+
+## Safety
+
+- **Rules:** every read and write is the person's own and checked by
+  [huishouden/rules](https://github.com/huishouden/rules).
+  - Helpers and kids get only what isn't private, and never money.
+  - Health is readable only by admins, the person's carers and the person themself. Others get
+    nothing, as if the person didn't exist.
+  - Records the connector creates carry `via: 'assistant'`, and the rules accept only that value.
+- **Rate limits:** each connected assistant may make 60 tool calls and 20 writes a minute (Workers
+  Rate Limiting bindings).
+- **Audit:** each tool call is written, as the person, to
+  `households/{id}/connections/{connection}/audit`: the tool, read or write, whether it worked, the
+  app and record. Only that person can read it. The portal shows it under each connected assistant,
+  next to **Disconnect**.
+- **Revoke:** the portal calls `POST /connections/revoke` with the person's Firebase ID token. The
+  connector checks the token with Firebase Auth, revokes the grant and its tokens, and removes the
+  connection record. `GET /connections` lists the person's grants.
+- **Logs:** each tool call logs the tool name, read or write, the outcome, the duration and an error
+  code. Logs never contain names, emails, record ids, tokens or medicine names. The connector sends
+  nothing to New Relic.
+
+## Development
+
+```sh
+bun install
+bun run lint      # tsc, src and tests
+bun run test      # unit, Firebase Auth, and every tool against the Firestore and Auth emulators (JDK 21)
+bun run e2e       # wrangler dev against the emulators + the MCP SDK client: the whole OAuth sign-in, then tools
+bun run dev       # wrangler dev (set FIREBASE_API_KEY in .dev.vars)
+```
+
+The tests use the household's real rules from huishouden/rules `main`. Set `RULES_REF` to use
+another ref, or `RULES_FILE` to use a local checkout. The household in `test/fixtures/household.ts`
+is invented: every role, a non-member, and Health with a carer and a non-carer.
+
+## Deploy
+
+```sh
+bunx wrangler secret put FIREBASE_API_KEY            # the project's public web API key, once
+bunx wrangler secret put FIREBASE_API_KEY --env staging
+bun run deploy && bun run deploy:staging
+```
+
+The connector needs no other secrets. Workers KV (grants), the rate limits and Workers itself all
+fit the Cloudflare free plan.
+
+### Deploy from GitHub Actions (optional)
+
+CI tests every push. It deploys staging and then production on `main` once the repository has these
+secrets; until then the deploy job is skipped with a notice.
+
+1. Cloudflare dashboard > My Profile > API Tokens > Create Token > "Edit Cloudflare Workers"
+   template, limited to this account.
+2. Add the token as `CLOUDFLARE_API_TOKEN` and the account id as `CLOUDFLARE_ACCOUNT_ID`:
+   `gh secret set CLOUDFLARE_API_TOKEN -R huishouden/connector` and
+   `gh secret set CLOUDFLARE_ACCOUNT_ID -R huishouden/connector`.
+
+## License
+
+MIT

@@ -1,0 +1,24 @@
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
+
+/** Bindings and settings (wrangler.toml). Everything here is public except the KV contents. */
+export interface Env {
+  /** Grants, tokens and clients (workers-oauth-provider), and the one-minute sign-in hand-offs. */
+  OAUTH_KV: KVNamespace;
+  OAUTH_PROVIDER: OAuthHelpers;
+  /** Tool calls per connected assistant per minute. */
+  TOOL_LIMITER?: RateLimit;
+  /** Writing tool calls per connected assistant per minute. */
+  WRITE_LIMITER?: RateLimit;
+  /** The Firebase project the household's data lives in. */
+  FIREBASE_PROJECT_ID: string;
+  /** The project's public web API key (it ships in every app), for Firebase Auth's token service. */
+  FIREBASE_API_KEY: string;
+  /** The suite's site: the portal's sign-in page (`/connect`) and every app's deep links. */
+  SITE_URL: string;
+  /** Overrides for the emulators in tests; production leaves them unset. */
+  FIRESTORE_URL?: string;
+  SECURETOKEN_URL?: string;
+  IDENTITY_URL?: string;
+}
+
+export const firestoreBase = (env: Pick<Env, 'FIRESTORE_URL'>) => (env.FIRESTORE_URL ?? 'https://firestore.googleapis.com/v1').replace(/\/$/, '');

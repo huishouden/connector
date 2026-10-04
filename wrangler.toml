@@ -1,0 +1,58 @@
+# Huishouden connector: the remote MCP server people add to their own AI assistant.
+name = "huishouden-connector"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+# global_fetch_strictly_public: Client ID Metadata Documents are fetched without same-zone routing.
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = true
+
+# Grants, tokens and clients (workers-oauth-provider; refresh tokens and props are stored hashed or
+# encrypted) and the one-minute sign-in hand-offs.
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "0cc4d6fd043c4383abd1dcd37244ba58"
+
+# Per connected assistant: 60 tool calls and 20 writes a minute.
+[[ratelimits]]
+name = "TOOL_LIMITER"
+namespace_id = "7301"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "WRITE_LIMITER"
+namespace_id = "7302"
+simple = { limit = 20, period = 60 }
+
+# Public values. The project's web API key ships in every app too, but is set with
+# `wrangler secret put FIREBASE_API_KEY` (and `--env staging`) so key scanners stay quiet. Nothing
+# else is secret: the connector acts with each person's own sign-in, never a service account.
+[vars]
+FIREBASE_PROJECT_ID = "huishouden-piekstra"
+SITE_URL = "https://huishouden-piekstra.web.app"
+
+# Staging: the same Worker against huishouden-staging (PRs' signed-in tests run there).
+[env.staging]
+name = "huishouden-connector-staging"
+workers_dev = true
+
+[[env.staging.kv_namespaces]]
+binding = "OAUTH_KV"
+id = "6fd863e29e4149c180c162b6bd70470d"
+
+[[env.staging.ratelimits]]
+name = "TOOL_LIMITER"
+namespace_id = "7303"
+simple = { limit = 60, period = 60 }
+
+[[env.staging.ratelimits]]
+name = "WRITE_LIMITER"
+namespace_id = "7304"
+simple = { limit = 20, period = 60 }
+
+[env.staging.vars]
+FIREBASE_PROJECT_ID = "huishouden-staging"
+SITE_URL = "https://huishouden-staging.web.app"
