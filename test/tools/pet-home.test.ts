@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { ALICE, CAROL, HELEN, KIM, NOW } from '../fixtures/household';
-import { call, connect, read, seed, type Connected } from '../helpers';
+import { call, connect, owner, read, seed, type Connected } from '../helpers';
 
 let alice: Connected, helen: Connected, kim: Connected, carol: Connected;
 beforeAll(async () => {
@@ -78,6 +78,18 @@ describe('appointments and contacts', () => {
     expect((await read(`households/h1/personalAgenda/${r.data.id}`))!.data).toMatchObject({ app: 'assistant', kind: 'appointment', audience: ['alice@example.com', 'bob@example.com', 'helen@example.com'], private: true, who: 'Nan' });
     expect((await call(carol, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
     expect((await call(kim, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
+  });
+
+  test("contacts: pay details reach admins and members only, and contacts_add never writes them", async () => {
+    await owner.commit([{ path: 'households/h1/contactPay/doc1', set: { zelle: 'doctor@example.com', updatedAt: 1, by: ALICE } }]);
+    const mine = (await call(alice, 'contacts_search', { query: 'example' })).data.contacts.find((c: { id: string }) => c.id === 'doc1');
+    expect(mine.pay).toEqual({ zelle: 'doctor@example.com' });
+    const theirs = await call(helen, 'contacts_search', { query: 'example' });
+    expect(theirs.isError).toBeFalsy();
+    expect(theirs.data.contacts.find((c: { id: string }) => c.id === 'doc1').pay).toBeUndefined();
+    expect(JSON.stringify(theirs)).not.toContain('doctor@example.com');
+    const r = await call(alice, 'contacts_add', { name: 'Example Rentals', apps: ['home'], pay: { zelle: 'x@example.com' } } as never);
+    expect('pay' in ((await read(`households/h1/contacts/${r.data.id}`))?.data ?? {})).toBe(false);
   });
 
   test('contacts: helpers search only open contacts and add open ones', async () => {
