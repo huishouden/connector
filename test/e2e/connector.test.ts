@@ -174,8 +174,14 @@ describe('an assistant signed in as a member', () => {
 
   test('lists the tools', async () => {
     const { tools } = await alice.client.listTools();
-    expect(tools.length).toBe(27);
+    expect(tools.length).toBe(28);
     expect(tools.map((t) => t.name)).toContain('health_medicines');
+  });
+
+  test("where's home?", async () => {
+    const r = await alice.client.callTool({ name: 'household_home', arguments: {} });
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain('12 Example Lane, Springfield, Illinois 62701');
   });
 
   test("what's on today?", async () => {

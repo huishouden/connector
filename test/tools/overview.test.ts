@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { ALICE, BOB, HELEN, KIM, MALLORY, CAROL } from '../fixtures/household';
-import { call, connect, read, seed, type Connected } from '../helpers';
+import { ALICE, BOB, HELEN, HOME, KIM, MALLORY, CAROL, NOW } from '../fixtures/household';
+import { LocalClock } from '@huishouden/pwa-kit/local-clock';
+import { householdHome } from '../../src/tools/overview';
+import type { ToolContext } from '../../src/tools/registry';
+import { call, connect, owner, read, seed, type Connected } from '../helpers';
 import { TOOLS } from '../../src/mcp';
 
 let alice: Connected, bob: Connected, helen: Connected, kim: Connected, mallory: Connected, carol: Connected;
@@ -16,7 +19,7 @@ describe('tools/list', () => {
   test('every tool is listed with a description and an input schema', async () => {
     const { tools } = await alice.client.listTools();
     expect(tools.map((t) => t.name)).toEqual(TOOLS.map((t) => t.name));
-    expect(tools).toHaveLength(27);
+    expect(tools).toHaveLength(28);
     for (const t of tools) {
       expect(t.description!.length).toBeGreaterThan(40);
       expect(t.inputSchema.type).toBe('object');
@@ -40,6 +43,61 @@ describe('households', () => {
     const r = await call(mallory, 'today', { household: 'h1' });
     expect(r.isError).toBe(true);
     expect(r.text).toContain('not in that household');
+  });
+});
+
+describe('household_home', () => {
+  test('every member reads the address and the household time zone: admin, member, helper and kid', async () => {
+    for (const c of [alice, carol, helen, kim]) {
+      const r = await call(c, 'household_home');
+      expect(r.isError).toBe(false);
+      expect(r.text).toContain('Address: 12 Example Lane, Springfield, Illinois 62701');
+      expect(r.text).toContain('Household time zone: America/Chicago');
+      expect(r.data.home).toMatchObject({ address: HOME.address, approximate: false, time_zone: 'America/Chicago', lat: HOME.lat, lng: HOME.lng });
+    }
+  });
+
+  test("in the person's language", async () => {
+    expect((await call(bob, 'household_home')).text).toContain('Adres: 12 Example Lane');
+    expect((await call(alice, 'household_home', { lang: 'es' })).text).toContain('Dirección: 12 Example Lane');
+  });
+
+  test('a non-member never gets it: not through the tool, not from Firestore', async () => {
+    const r = await call(mallory, 'household_home', { household: 'h1' });
+    expect(r.isError).toBe(true);
+    expect(r.text).toContain('not in that household');
+    expect(r.text).not.toContain('Example Lane');
+    expect(r.data.home).toBeUndefined();
+    await expect(mallory.db.get('households/h1')).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  test('the tool refuses a household the person is not a member of, whatever it was handed', async () => {
+    const ctx = {
+      session: { email: MALLORY, link: () => 'https://example.test/' },
+      here: { id: 'h1', name: 'Maple Street', members: [ALICE], joined: [ALICE], createdAt: 1, home: { ...HOME }, role: 'member', restricted: false },
+      clock: new LocalClock('UTC', () => NOW),
+      lang: 'en',
+      touched: () => {},
+    } as unknown as ToolContext;
+    await expect(householdHome.run(ctx, {})).rejects.toMatchObject({ key: 'error.noSuchHousehold' });
+  });
+
+  test('an approximate home says so, and a household without one says how to add it', async () => {
+    const none = await call(mallory, 'household_home');
+    expect(none.isError).toBe(false);
+    expect(none.data.home).toBeNull();
+    expect(none.text).toContain('No home is set yet');
+    await owner.commit([{ path: 'households/h2', set: { name: 'Elsewhere', members: [MALLORY], joined: [MALLORY], createdAt: 1, home: { address: 'Riverside, Springfield, Illinois', lat: 39.78, lng: -89.65, approximate: true, setBy: MALLORY, updatedAt: NOW } } }]);
+    const fresh = await connect(MALLORY);
+    try {
+      const r = await call(fresh, 'household_home');
+      expect(r.data.home).toMatchObject({ address: 'Riverside, Springfield, Illinois', approximate: true, time_zone: null });
+      expect(r.text).toContain('Approximate');
+      expect(r.text).not.toContain('time zone');
+    } finally {
+      await fresh.close();
+      await owner.commit([{ path: 'households/h2', set: { name: 'Elsewhere', members: [MALLORY], joined: [MALLORY], createdAt: 1 } }]);
+    }
   });
 });
 

@@ -2,6 +2,7 @@ import { householdRole, isRestricted, type Role } from '@huishouden/pwa-kit/role
 import { isLang, loadLang, type Lang } from '@huishouden/pwa-kit/i18n';
 import { LocalClock, isTimeZone } from '@huishouden/pwa-kit/local-clock';
 import { FirestoreRest, FirestoreError, type Doc } from '@huishouden/pwa-kit/firestore-rest';
+import { toHome, type HouseholdHome } from '@huishouden/pwa-kit/home';
 
 /** What the grant carries for the person (encrypted in KV by workers-oauth-provider). */
 export interface GrantProps {
@@ -26,12 +27,15 @@ export interface Household {
   joined: string[];
   roles?: Record<string, Role>;
   currency?: string;
+  /** Where the household lives (`households/{id}.home`): every member reads it. */
+  home?: HouseholdHome;
   createdAt: number;
 }
 
 export function toHousehold(id: string, d: Record<string, unknown>): Household {
   const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
   const roles = d.roles && typeof d.roles === 'object' ? (d.roles as Record<string, Role>) : undefined;
+  const home = toHome(d.home);
   return {
     id,
     name: typeof d.name === 'string' ? d.name : '',
@@ -39,6 +43,7 @@ export function toHousehold(id: string, d: Record<string, unknown>): Household {
     joined: strings(d.joined),
     ...(roles ? { roles } : {}),
     ...(typeof d.currency === 'string' ? { currency: d.currency } : {}),
+    ...(home ? { home } : {}),
     createdAt: typeof d.createdAt === 'number' ? d.createdAt : 0,
   };
 }
