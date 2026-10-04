@@ -22,6 +22,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: huishouden/pwa-kit/actions/leak-scan@v0
+      - uses: huishouden/pwa-kit/actions/license-check@v0 # PolyForm Shield 1.0.0 (pwa-kit STANDARD.md "License")
 
   # Typecheck, every tool against the Firestore and Auth emulators with the household's real rules
   # (huishouden/rules main), and the end-to-end sign-in with the MCP SDK client against wrangler dev.
