@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { cleanContact, contactInput, toContact, type Contact } from '@huishouden/pwa-kit/contact-core';
+import { CONTACT_PAY_COLLECTION, CONTACT_PAY_KINDS, cleanContact, cleanContactPay, contactInput, toContact, withContactPay, type Contact, type ContactPay } from '@huishouden/pwa-kit/contact-core';
 import { cleanAudience } from '@huishouden/pwa-kit/audience';
 import { householdRole } from '@huishouden/pwa-kit/role-core';
 import { formatDateLong, formatTime } from '@huishouden/pwa-kit/time';
@@ -130,7 +130,8 @@ function done(ctx: ToolContext, app: string, path: string, id: string, repeated:
 // ---- Contacts: the household's shared address book ----
 
 function contactLine(c: Contact): string {
-  const bits = [c.role, c.phone, c.email, c.website, c.address].filter(Boolean);
+  const pay = c.pay ? CONTACT_PAY_KINDS.filter((k) => c.pay![k]).map((k) => `${k}: ${c.pay![k]}`) : [];
+  const bits = [c.role, c.phone, c.email, c.website, c.address, ...pay].filter(Boolean);
   return `- **${c.name}**${bits.length ? ` · ${bits.join(' · ')}` : ''}${c.apps.length ? ` · ${c.apps.join(', ')}` : ''}${c.private ? ' · 🔒' : ''} · id \`${c.id}\``;
 }
 
@@ -138,7 +139,7 @@ export const contactsSearch = defineTool({
   name: 'contacts_search',
   title: 'Search household contacts',
   description:
-    "Searches the household's shared contacts (doctors, the vet, the pharmacy, the plumber, the school…) by name, role, phone, email, address or notes. Helpers and kids see only contacts not marked private.",
+    "Searches the household's shared contacts (doctors, the vet, the pharmacy, the plumber, the school…) by name, role, phone, email, address or notes. Helpers and kids see only contacts not marked private. For admins and members, each carries how the household pays them (`pay`: zelle, venmo, bank, check, portal) when Bills remembered it; helpers and kids never get pay details.",
   kind: 'read',
   input: {
     ...common,
@@ -148,8 +149,16 @@ export const contactsSearch = defineTool({
   async run(ctx, args) {
     const docs = await ctx.session.openRecords(ctx.here, 'contacts', true);
     ctx.touched('contacts');
+    // Pay details are money: read for admins and members only (the rules refuse helpers and kids).
+    const pay = new Map<string, ContactPay>();
+    if (!ctx.here.restricted) {
+      for (const d of await ctx.session.openRecords(ctx.here, CONTACT_PAY_COLLECTION, false)) {
+        const p = cleanContactPay(d.data);
+        if (p) pay.set(d.id, p);
+      }
+    }
     const words = fold(args.query ?? '').split(/\s+/).filter(Boolean);
-    const all = docs.map((d) => toContact(d.id, d.data));
+    const all = withContactPay(docs.map((d) => toContact(d.id, d.data)), pay);
     const found = all
       .filter((c) => (!args.app || c.apps.includes(args.app)) && words.every((w) => fold([c.name, c.role, c.phone, c.email, c.website, c.address, c.notes].filter(Boolean).join(' ')).includes(w)))
       .sort((a, b) => a.name.localeCompare(b.name));
