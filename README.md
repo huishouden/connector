@@ -27,6 +27,7 @@ same key writes nothing new.
 | Tool | Does |
 |---|---|
 | `households` | Who is signed in, their households and their role in each, language and time zone |
+| `household_home` | The household's home address (or only its neighbourhood, when approximate) and time zone; every member reads it, helpers and kids included |
 | `today` | Today's agenda (overdue, today, next 48 hours) and open to-dos, as the portal shows them |
 | `calendar` | The household calendar between two days, by day |
 | `todos` | Open to-dos from every app, with ids, filters and sorts, and whether this person may act on each |
@@ -83,6 +84,7 @@ The browser and server halves are reusable kit modules, documented in
 | `@huishouden/pwa-kit/firebase-auth-rest` | Refresh token to ID token; verifying a portal ID token |
 | `@huishouden/pwa-kit/firestore-rest` | Firestore as the person: get, query, atomic commit |
 | `@huishouden/pwa-kit/local-clock` | The person's days on a UTC server |
+| `@huishouden/pwa-kit/home` | Reading the household's home (`toHome`) |
 | `@huishouden/pwa-kit/todo-core`, `/agenda-core`, `/contact-core`, `/role-core`, `/dose`, `/schedule` | The data contracts and app logic |
 
 The calendar feed reuses the same modules.
