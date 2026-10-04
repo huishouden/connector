@@ -85,6 +85,49 @@ export const households = defineTool({
   },
 });
 
+export const householdHome = defineTool({
+  name: 'household_home',
+  title: "The household's home",
+  description:
+    "Where the household lives: its home address (or only the neighbourhood, when the household chose an approximate home), the household's time zone, and who set it. Every member sees it (admins, members, helpers and kids). Use it for directions, \"what's our address?\", or anything near home.",
+  kind: 'read',
+  input: { household: common.household, lang: common.lang },
+  async run(ctx) {
+    // The rules let only members read a household, and `here` only finds the person's own; this
+    // says so again so the address never reaches anyone else.
+    if (!ctx.here.members.includes(ctx.session.email.toLowerCase())) throw new UserError('error.noSuchHousehold');
+    const home = ctx.here.home;
+    ctx.touched('household');
+    return render(ctx.lang, () => {
+      if (!home) {
+        return {
+          text: [`**${t('household.title')}** · ${ctx.here.name}`, '', t('household.noHome', { url: ctx.session.link('').replace(/\/\/$/, '/') })].join('\n'),
+          data: { household: ctx.here.id, name: ctx.here.name, home: null },
+        };
+      }
+      const lines = [`**${t('household.title')}** · ${ctx.here.name}`, '', t('household.address', { address: home.address })];
+      if (home.approximate) lines.push(t('household.approximate'));
+      if (home.timeZone) lines.push(t('household.zone', { zone: home.timeZone }));
+      return {
+        text: lines.join('\n'),
+        data: {
+          household: ctx.here.id,
+          name: ctx.here.name,
+          home: {
+            address: home.address,
+            approximate: home.approximate === true,
+            time_zone: home.timeZone ?? null,
+            lat: home.lat,
+            lng: home.lng,
+            ...(home.placeId ? { place_id: home.placeId } : {}),
+            updated: new Date(home.updatedAt).toISOString().slice(0, 10),
+          },
+        },
+      };
+    });
+  },
+});
+
 export const today = defineTool({
   name: 'today',
   title: "What's on today",

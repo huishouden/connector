@@ -30,6 +30,12 @@ export default {
   'households.settings': 'Answers in {lang}, times in {zone}.',
   'households.portal': 'Portal: {url}',
 
+  'household.title': 'Home',
+  'household.address': 'Address: {address}',
+  'household.approximate': 'Approximate: the household shared its neighbourhood, not the house.',
+  'household.zone': "Household time zone: {zone}",
+  'household.noHome': 'No home is set yet. An admin or member can add it in the portal: {url}',
+
   'today.title': 'Today, {day}',
   'today.overdue': 'Overdue',
   'today.today': 'Today',

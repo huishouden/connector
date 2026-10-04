@@ -5,7 +5,7 @@ import { FirebaseAuthError } from '@huishouden/pwa-kit/firebase-auth-rest';
 import type { Lang } from '@huishouden/pwa-kit/i18n';
 import { UserError, type AuditEntry, type Session } from './context';
 import { failureText, render, toMcp, type ToolDef } from './tools/registry';
-import { calendar, households, today, todos } from './tools/overview';
+import { calendar, householdHome, households, today, todos } from './tools/overview';
 import { groceriesAdd, groceriesCheck, groceriesList, tasksAdd, todoCancel, todoDone } from './tools/lists';
 import { billsDue } from './tools/money';
 import { petLogDose, petLogFeeding, petToday } from './tools/pet';
@@ -17,6 +17,7 @@ import { t } from './i18n';
 /** Every tool, in the order clients list them. */
 export const TOOLS: ToolDef[] = [
   households,
+  householdHome,
   today,
   calendar,
   todos,
