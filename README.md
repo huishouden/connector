@@ -148,3 +148,5 @@ secrets; until then the deploy job is skipped with a notice.
 
 Source available under [PolyForm Shield 1.0.0](LICENSE): you may use, study and modify this code
 for any purpose except providing a product that competes with Huishouden.
+
+Huishouden and its logo are the project's brand; please don't use them for other products.
