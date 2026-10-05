@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { ALICE, CAROL, HELEN, KIM, NOW } from '../fixtures/household';
+import { ALICE, BOB, CAROL, HELEN, KIM, NOW } from '../fixtures/household';
 import { call, connect, owner, read, seed, type Connected } from '../helpers';
 
-let alice: Connected, helen: Connected, kim: Connected, carol: Connected;
+let alice: Connected, helen: Connected, kim: Connected, carol: Connected, bob: Connected;
 beforeAll(async () => {
   await seed();
-  [alice, helen, kim, carol] = await Promise.all([ALICE, HELEN, KIM, CAROL].map((e) => connect(e)));
+  [alice, helen, kim, carol, bob] = await Promise.all([ALICE, HELEN, KIM, CAROL, BOB].map((e) => connect(e)));
 });
 afterAll(async () => {
-  for (const c of [alice, helen, kim, carol]) await c.close();
+  for (const c of [alice, helen, kim, carol, bob]) await c.close();
 });
 
 describe('pet', () => {
@@ -89,9 +89,19 @@ describe('appointments and contacts', () => {
     expect(JSON.stringify(reminders.map((x) => x.data))).not.toContain('ECG');
     // A helper carer adds one without notes; with notes, refused. Others, never.
     expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Dentist', start: '2031-01-20T09:00' })).isError).toBe(false);
-    expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Dentist', start: '2031-01-20T09:00', notes: 'x' })).isError).toBe(true);
-    expect((await call(carol, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
-    expect((await call(kim, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
+    expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Refused dentist', start: '2031-01-21T09:00', notes: 'x' })).isError).toBe(true);
+    expect((await call(carol, 'add_appointment', { app: 'health', person: 'Nan', title: 'Refused X', start: '2031-01-15T11:00' })).isError).toBe(true);
+    expect((await call(kim, 'add_appointment', { app: 'health', person: 'Nan', title: 'Refused X', start: '2031-01-15T11:00' })).isError).toBe(true);
+    // A refused call leaves nothing behind: no visit, no calendar item, no reminder.
+    const visits = await owner.query('households/h1/healthPeople/nan', 'visits');
+    expect(visits.filter((v) => String(v.data.title).startsWith('Refused'))).toEqual([]);
+    const everything = JSON.stringify([...(await owner.query('households/h1', 'personalAgenda')), ...(await owner.query('households/h1', 'personalReminders'))].map((d) => d.data));
+    expect(everything).not.toContain(String(Date.parse('2031-01-21T09:00:00-05:00')));
+    // The logs say which tool and how it went, never who, what or where.
+    await Promise.all([alice.settled(), helen.settled()]);
+    const logs = JSON.stringify([...alice.logs, ...helen.logs, ...carol.logs, ...kim.logs]);
+    expect(logs).not.toMatch(/Cardiology|ECG|Heart Center|Fasting|Nan|Dr\. Example|Dentist|@/);
+    for (const l of [...alice.logs, ...helen.logs]) expect(['read', 'write']).toContain(l.kind);
   });
 
   test('health_appointments: the visits, notes only for keepers', async () => {
@@ -104,6 +114,12 @@ describe('appointments and contacts', () => {
     expect(seen).toBeTruthy();
     expect(seen.notes).toBeUndefined();
     expect(forHelen.text).not.toContain('no driving');
+    // The rules, not just the tool: Helen, a helper carer, can't read the notes directly; Carol and Kim not even the visit.
+    await expect(helen.db.get(`households/h1/healthPeople/nan/visitNotes/${eye.id}`)).rejects.toMatchObject({ code: 'permission-denied' });
+    for (const c of [carol, kim]) await expect(c.db.get(`households/h1/healthPeople/nan/visits/${eye.id}`)).rejects.toMatchObject({ code: 'permission-denied' });
+    // Bob, a member who cares for Nan, keeps the notes.
+    const forBob = await call(bob, 'health_appointments', { person: 'Nan' });
+    expect(forBob.data.visits.find((v: { id: string }) => v.id === eye.id)).toMatchObject({ notes: 'Drops: no driving after' });
     expect((await call(kim, 'health_appointments', {})).isError).toBe(true);
     expect((await call(carol, 'health_appointments', {})).data.visits).toEqual([]);
   });
