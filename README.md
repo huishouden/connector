@@ -46,7 +46,7 @@ same key writes nothing new.
 | `health_log_dose` | Given or skipped, with Health's double-dose and as-needed guards (it asks before overriding) |
 | `health_add_medicine`, `health_update_medicine` | Add or change a medicine, stop or restart it, count the supply, mark a refill ordered |
 | `health_doctor_list` | Health's printable medicine list, as Markdown |
-| `health_appointments` | A person's visits, coming up and past (attended or missed), with doctor, place, prep, reminders and follow-up; notes only for admins and member carers |
+| `health_appointments` | A person's visits, coming up and past (attended or missed), with doctor (a doctor marked private only for admins and members), place, prep, reminders and follow-up; notes only for admins and member carers |
 
 There are no delete tools. Every Health answer ends with a one-line note: these are the
 household's own records, not medical advice.
