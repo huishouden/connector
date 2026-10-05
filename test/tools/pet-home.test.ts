@@ -120,6 +120,9 @@ describe('appointments and contacts', () => {
     expect(published.length).toBeGreaterThan(0);
     expect(JSON.stringify(published.map((d) => d.data))).not.toContain('Dr. Private');
     expect(JSON.stringify(await call(helen, 'health_appointments', { person: 'Nan' }))).not.toContain('Dr. Private');
+    // Straight from Firestore too: the visit holds only the contact's id, and the rules refuse Helen the private contact.
+    expect(JSON.stringify(await helen.db.get(`households/h1/healthPeople/nan/visits/${r.data.id}`))).not.toContain('Dr. Private');
+    await expect(helen.db.get('households/h1/contacts/doc2')).rejects.toMatchObject({ code: 'permission-denied' });
     // Alice and Bob may read private contacts, so their answers name the doctor.
     for (const c of [alice, bob]) {
       const visit = (await call(c, 'health_appointments', { person: 'Nan' })).data.visits.find((v: { id: string }) => v.id === r.data.id);
