@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { exchangeRefreshToken, IdTokenCache, type AuthRestOptions } from '@huishouden/pwa-kit/firebase-auth-rest';
 import { FirestoreRest, type Doc } from '@huishouden/pwa-kit/firestore-rest';
-import { Session, type GrantProps } from '../src/context';
+import { Session, sessionProps, type GrantProps } from '../src/context';
 import { buildServer, type ToolCallLog } from '../src/mcp';
 import { writeAudit, forgetConnections } from '../src/audit';
 import { householdDocs, NOW, PROJECT } from './fixtures/household';
@@ -78,7 +78,7 @@ export async function connect(email: string, { now = NOW, lang, timeZone }: { no
   const cache = new IdTokenCache((r) => exchangeRefreshToken(AUTH, r));
   const db = new FirestoreRest({ projectId: PROJECT, token: async () => (await cache.get(refreshToken)).token, baseUrl: FIRESTORE_URL });
   const pending: Promise<void>[] = [];
-  const session = new Session(props, db, 'https://huishouden-staging.web.app', () => now, (h, entry) => pending.push(writeAudit(db, props, h, entry, now)));
+  const session = new Session(sessionProps(props), db, 'https://huishouden-staging.web.app', () => now, (h, entry) => pending.push(writeAudit(db, props, h, entry, now)));
   const logs: ToolCallLog[] = [];
   const server = buildServer(session, { log: (e) => logs.push(e) });
   const [a, b] = InMemoryTransport.createLinkedPair();

@@ -1,4 +1,5 @@
 import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
+import type { AuthRestOptions } from '@huishouden/pwa-kit/firebase-auth-rest';
 
 /** Bindings and settings (wrangler.toml). Everything here is public except the KV contents. */
 export interface Env {
@@ -22,3 +23,11 @@ export interface Env {
 }
 
 export const firestoreBase = (env: Pick<Env, 'FIRESTORE_URL'>) => (env.FIRESTORE_URL ?? 'https://firestore.googleapis.com/v1').replace(/\/$/, '');
+
+/** Firebase Auth over REST for this project (the emulators when the test overrides are set). */
+export const authOptions = (env: Env): AuthRestOptions => ({
+  projectId: env.FIREBASE_PROJECT_ID,
+  apiKey: env.FIREBASE_API_KEY,
+  ...(env.SECURETOKEN_URL ? { securetokenUrl: env.SECURETOKEN_URL } : {}),
+  ...(env.IDENTITY_URL ? { identityUrl: env.IDENTITY_URL } : {}),
+});

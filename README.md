@@ -50,6 +50,11 @@ same key writes nothing new.
 There are no delete tools. Every Health answer ends with a one-line note: these are the
 household's own records, not medical advice.
 
+The tools live in the kit, `@huishouden/pwa-kit/household-tools`: `hh data` (huishouden/cli) runs
+the same implementation from a terminal, so the two can't drift. This repo adds the MCP server, the
+sign-in, rate limits and the audit log around them, and tests every tool under the household's
+rules against the emulators.
+
 ## How sign-in works
 
 The connector speaks OAuth 2.1 as MCP clients expect: discovery (RFC 9728 and RFC 8414), dynamic
@@ -75,12 +80,23 @@ there is no OAuth client to configure and no redirect URI to register.
    checks the Firebase sign-in still stands. When it doesn't, the grant ends and the assistant asks
    the person to connect again.
 
+### `hh login`
+
+The `hh` command line signs in through the same portal page, with a loopback address and a PKCE
+proof key in place of a browser cookie (pwa-kit docs/server.md "Signing in from a command line"):
+
+| Endpoint | Caller | Does |
+|---|---|---|
+| `POST /cli/hand-off` | the portal (CORS: its origin only) | Takes `{ state, codeChallenge, redirect, refreshToken }`. `redirect` must be exactly `http://127.0.0.1:<1024-65535>/callback` or `http://[::1]:<port>/callback`. Checks the refresh token with Firebase Auth, keeps it for two minutes under a one-time code (encrypted with a key only the code derives, bound to the state, the challenge and the redirect) and answers `{ code }` |
+| `POST /cli/token` | `hh` (a request with an `Origin` header is refused, so no web page can spend a code) | Takes `{ code, state, code_verifier, redirect_uri }`. The first attempt uses the code up. A replayed or expired code, another state or redirect, or a verifier that doesn't match the challenge gets `invalid_grant`. Otherwise it answers the refresh token, who it is, and the project's public web config |
+
 The browser and server halves are reusable kit modules, documented in
 [pwa-kit docs/server.md](https://github.com/huishouden/pwa-kit/blob/main/docs/server.md):
 
 | Module | Provides |
 |---|---|
-| `@huishouden/pwa-kit/signin-handoff` | The portal's /connect flow |
+| `@huishouden/pwa-kit/signin-handoff` | The portal's /connect flow, and `hh login`'s |
+| `@huishouden/pwa-kit/household-tools` | Every tool, shared with `hh data` |
 | `@huishouden/pwa-kit/firebase-auth-rest` | Refresh token to ID token; verifying a portal ID token |
 | `@huishouden/pwa-kit/firestore-rest` | Firestore as the person: get, query, atomic commit |
 | `@huishouden/pwa-kit/local-clock` | The person's days on a UTC server |
@@ -97,6 +113,7 @@ The calendar feed reuses the same modules.
   - Health is readable only by admins, the person's carers and the person themself. Others get
     nothing, as if the person didn't exist.
   - Records the connector creates carry `via: 'assistant'`, and the rules accept only that value.
+    (`hh data` leaves it out: the person is typing.)
 - **Rate limits:** each connected assistant may make 60 tool calls and 20 writes a minute (Workers
   Rate Limiting bindings).
 - **Audit:** each tool call is written, as the person, to
@@ -115,7 +132,7 @@ The calendar feed reuses the same modules.
 ```sh
 bun install
 bun run lint      # tsc, src and tests
-bun run test      # unit, Firebase Auth, and every tool against the Firestore and Auth emulators (JDK 21)
+bun run test      # unit, Firebase Auth, hh login's endpoints, and every tool against the Firestore and Auth emulators (JDK 21)
 bun run e2e       # wrangler dev against the emulators + the MCP SDK client: the whole OAuth sign-in, then tools
 bun run dev       # wrangler dev (set FIREBASE_API_KEY in .dev.vars)
 ```
