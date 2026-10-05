@@ -61,6 +61,23 @@ describe('hh login', () => {
     expect((await again.json()) as object).toEqual({ error: 'invalid_grant' });
   });
 
+  test('[::1] works too; the time zone comes back when it is a real one, and is dropped otherwise', async () => {
+    const e = env();
+    const v6 = 'http://[::1]:49152/callback';
+    const { code } = (await (await handOff(e, { redirect: v6, timeZone: 'America/New_York' })).json()) as { code: string };
+    expect((await (await collect(e, code, { redirect_uri: v6 })).json()) as object).toMatchObject({ refresh_token: refreshToken, time_zone: 'America/New_York' });
+    const { code: other } = (await (await handOff(e, { timeZone: 'Not/AZone' })).json()) as { code: string };
+    expect((await (await collect(e, other)).json()) as object).not.toHaveProperty('time_zone');
+  });
+
+  test('the portal may ask first (CORS preflight), from its own origin only', async () => {
+    const pre = await cliHandoff(new Request(`${WORKER}${CLI_HANDOFF_PATH}`, { method: 'OPTIONS', headers: { Origin: SITE } }), env());
+    expect(pre.status).toBe(204);
+    expect(pre.headers.get('Access-Control-Allow-Origin')).toBe(SITE);
+    expect((await cliHandoff(new Request(`${WORKER}${CLI_HANDOFF_PATH}`, { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } }), env())).status).toBe(403);
+    expect((await cliHandoff(new Request(`${WORKER}${CLI_HANDOFF_PATH}`, { method: 'GET', headers: { Origin: SITE } }), env())).status).toBe(405);
+  });
+
   test('a non-loopback redirect is refused before anything is kept', async () => {
     for (const redirect of ['http://localhost:49152/callback', 'https://evil.example/callback', 'http://127.0.0.1:80/callback', 'http://127.0.0.1:49152/callback?x=1']) {
       const res = await handOff(env(), { redirect });

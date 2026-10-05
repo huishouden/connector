@@ -1,8 +1,8 @@
 import { exchangeRefreshToken, FirebaseAuthError } from '@huishouden/pwa-kit/firebase-auth-rest';
 import { isTimeZone } from '@huishouden/pwa-kit/local-clock';
-import { isCliHandoffRequest, storeCliHandoff, takeCliHandoff } from '@huishouden/pwa-kit/signin-handoff';
-import type { Env } from '../env';
-import { authOptions, cors, json } from './http';
+import { isCliHandoffRequest, storeCliHandoff, takeCliHandoff, type HandoffRequest } from '@huishouden/pwa-kit/signin-handoff';
+import { authOptions, type Env } from '../env';
+import { cors, json } from './http';
 
 /**
  * `hh login` (huishouden/cli): the portal hands a sign-in over at /cli/hand-off and `hh` collects it
@@ -10,22 +10,31 @@ import { authOptions, cors, json } from './http';
  * command line" in the kit's docs/server.md).
  */
 
-/** The portal hands a command-line sign-in over: kept two minutes under a one-time code. */
-export async function cliHandoff(request: Request, env: Env): Promise<Response> {
+/**
+ * The portal hands a sign-in over (the connector's own at /connect/hand-off, `hh`'s at
+ * /cli/hand-off): its origin only, a POST, a body of the right shape, a refresh token Firebase Auth
+ * accepts; an unknown time zone is dropped. `keep` stores it and returns the one-time code.
+ */
+export async function acceptHandoff<B extends HandoffRequest>(request: Request, env: Env, valid: (body: unknown) => body is B, keep: (body: B, who: { uid: string; email: string }) => Promise<string>): Promise<Response> {
   const headers = cors(env, request);
   if (!headers) return json({ error: 'origin' }, 403);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
   if (request.method !== 'POST') return json({ error: 'method' }, 405, headers);
   const body = await request.json().catch(() => null);
-  if (!isCliHandoffRequest(body)) return json({ error: 'invalid_request' }, 400, headers);
+  if (!valid(body)) return json({ error: 'invalid_request' }, 400, headers);
   try {
     const who = await exchangeRefreshToken(authOptions(env), body.refreshToken);
-    const code = await storeCliHandoff(env.OAUTH_KV, { ...body, ...(body.timeZone && !isTimeZone(body.timeZone) ? { timeZone: undefined } : {}) }, who);
+    const code = await keep({ ...body, ...(body.timeZone && !isTimeZone(body.timeZone) ? { timeZone: undefined } : {}) }, who);
     return json({ code }, 200, headers);
   } catch (e) {
     if (e instanceof FirebaseAuthError) return json({ error: e.kind }, e.kind === 'unavailable' ? 503 : 401, headers);
     throw e;
   }
+}
+
+/** The portal hands a command-line sign-in over: kept two minutes under a one-time code. */
+export function cliHandoff(request: Request, env: Env): Promise<Response> {
+  return acceptHandoff(request, env, isCliHandoffRequest, (body, who) => storeCliHandoff(env.OAUTH_KV, body, who));
 }
 
 

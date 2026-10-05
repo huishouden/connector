@@ -2,15 +2,12 @@ import { AuthorizationError, CimdFetchError, authorizationErrorRedirect, type Co
 import { CALLBACK_PATH, CLI_HANDOFF_PATH, CLI_TOKEN_PATH, HANDOFF_PATH, connectUrl, isHandoffRequest, storeHandoff, takeHandoff, type HandoffRequest } from '@huishouden/pwa-kit/signin-handoff';
 import { exchangeRefreshToken, verifyIdToken, FirebaseAuthError } from '@huishouden/pwa-kit/firebase-auth-rest';
 import { FirestoreRest } from '@huishouden/pwa-kit/firestore-rest';
-import { isTimeZone } from '@huishouden/pwa-kit/local-clock';
 import { loadLang, matchLang, withLang, type Lang } from '@huishouden/pwa-kit/i18n';
-import { firestoreBase, type Env } from '../env';
+import { authOptions, firestoreBase, type Env } from '../env';
 import type { GrantProps } from '../context';
 import { recordConnection } from '../audit';
-import { authOptions, cors, json } from './http';
-import { cliHandoff, cliToken } from './cli';
-
-export { authOptions };
+import { cors, json } from './http';
+import { cliHandoff, cliToken, acceptHandoff } from './cli';
 import { t } from '../i18n';
 
 /**
@@ -114,20 +111,8 @@ async function authorizePost(request: Request, env: Env): Promise<Response> {
 /** Who signed in on the portal, kept for the callback. */
 type Handoff = HandoffRequest & { uid: string; email: string };
 
-async function handoff(request: Request, env: Env): Promise<Response> {
-  const headers = cors(env, request);
-  if (!headers) return json({ error: 'origin' }, 403);
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
-  const body = await request.json().catch(() => null);
-  if (!isHandoffRequest(body)) return json({ error: 'invalid_request' }, 400, headers);
-  try {
-    const who = await exchangeRefreshToken(authOptions(env), body.refreshToken);
-    const code = await storeHandoff<Handoff>(env.OAUTH_KV, { ...body, ...(body.timeZone && !isTimeZone(body.timeZone) ? { timeZone: undefined } : {}), uid: who.uid, email: who.email });
-    return json({ code }, 200, headers);
-  } catch (e) {
-    if (e instanceof FirebaseAuthError) return json({ error: e.kind }, e.kind === 'unavailable' ? 503 : 401, headers);
-    throw e;
-  }
+function handoff(request: Request, env: Env): Promise<Response> {
+  return acceptHandoff(request, env, isHandoffRequest, (body, who) => storeHandoff<Handoff>(env.OAUTH_KV, { ...body, uid: who.uid, email: who.email }));
 }
 
 async function callback(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

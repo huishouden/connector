@@ -16,7 +16,7 @@
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",
     "@cloudflare/workers-oauth-provider": "1.2.1",
-    "@huishouden/pwa-kit": "github:huishouden/pwa-kit#feat/household-tools-cli-signin",
+    "@huishouden/pwa-kit": "github:huishouden/pwa-kit#fix/dose-someone-else-guard",
     "@modelcontextprotocol/sdk": "1.32.0",
     "zod": "^4.6.5"
   },
