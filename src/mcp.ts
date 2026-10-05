@@ -1,6 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker-provider.js';
-import { errorCode, runTool, signInEnded, TOOLS, type Session, type ToolResult } from '@huishouden/pwa-kit/household-tools';
+import { errorCode, runTool, signInEnded, TOOLS, type Session, type ToolCall, type ToolResult } from '@huishouden/pwa-kit/household-tools';
+import { FirestoreError } from '@huishouden/pwa-kit/firestore-rest';
+import { isLang, loadLang, withLang, type Lang } from '@huishouden/pwa-kit/i18n';
+import { t } from './i18n';
+import { nextPacificMidnight, type QuotaScope, type ReadMeter } from './reads';
 
 export { TOOLS };
 
@@ -20,6 +24,8 @@ export interface ToolCallLog {
   ms: number;
   /** An error class or code, never a message (messages may hold names). */
   error?: string;
+  /** Firestore reads the call was billed for (src/reads.ts). */
+  reads?: number;
 }
 
 export interface ServerOptions {
@@ -29,6 +35,26 @@ export interface ServerOptions {
   log?: (entry: ToolCallLog) => void;
   /** The grant's Firebase sign-in is gone for good: end the grant. */
   onRevoked?: () => Promise<void>;
+  /** The day's Firestore read budgets; the session's FirestoreRest fetches through `reads.fetch`. */
+  reads?: ReadMeter;
+  /** Work that may finish after the answer (the Worker's `ctx.waitUntil`); awaited when unset. */
+  defer?: (work: Promise<void>) => void;
+}
+
+/** Firestore said the project's daily quota is used up (429 RESOURCE_EXHAUSTED; Spark resets at midnight Pacific). */
+export const overQuota = (e: unknown): boolean => e instanceof FirestoreError && /\b429\b|RESOURCE_EXHAUSTED/.test(e.message);
+
+/**
+ * A call refused for reads: `firestore-quota`, as calendar's API answers, with which budget and when
+ * it resets. The text says so in the person's language rather than "could not be reached".
+ */
+export async function quotaResult(scope: QuotaScope, lang: Lang, now: number): Promise<ToolResult> {
+  await loadLang(lang);
+  return {
+    text: withLang(lang, () => t(`quota.${scope}`)),
+    data: { error: 'firestore-quota', scope, resetsAt: new Date(nextPacificMidnight(now)).toISOString() },
+    error: true,
+  };
 }
 
 /** The MCP result for a tool's answer. */
@@ -41,7 +67,7 @@ export function toMcp(result: ToolResult) {
 }
 
 /** An MCP server for one request, its tools acting as `session`'s person. */
-export function buildServer(session: Session, { allow, log, onRevoked }: ServerOptions = {}): McpServer {
+export function buildServer(session: Session, { allow, log, onRevoked, reads, defer }: ServerOptions = {}): McpServer {
   const server = new McpServer({ name: 'huishouden', title: 'Huishouden', version: '0.1.0' }, { instructions: INSTRUCTIONS, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
   for (const tool of TOOLS) {
     server.registerTool(
@@ -54,10 +80,25 @@ export function buildServer(session: Session, { allow, log, onRevoked }: ServerO
       },
       async (args: Record<string, unknown>) => {
         const started = Date.now();
+        const spent = reads ? await reads.begin() : null;
         // The tools themselves are @huishouden/pwa-kit/household-tools, shared with `hh data`.
-        const call = await runTool(session, tool, args, { allow });
+        const call: ToolCall = spent
+          ? { result: { text: '', error: true }, lang: requestLang(session, args), touched: {} }
+          : await runTool(session, tool, args, { allow });
+        const scope = spent ?? reads?.refused ?? (overQuota(call.error) ? 'project' : null);
+        // A budget met mid-call refuses every read after it, and a tool may answer around a failed
+        // read: the whole answer is the quota's, never a partial one. A change already saved keeps
+        // its own answer, so the assistant doesn't make it again.
+        if (scope && !(reads?.wrote && !call.result.error)) call.result = await quotaResult(scope, call.lang, (reads?.now ?? Date.now)());
+        const billed = reads?.reads;
+        if (reads) {
+          const done = reads.finish();
+          if (defer) defer(done);
+          else await done;
+        }
         if (call.householdId) session.record(call.householdId, { tool: tool.name, kind: tool.kind, ok: !call.result.error, ...call.touched });
-        log?.({ tool: tool.name, kind: tool.kind, ok: !call.result.error, ms: Date.now() - started, ...(call.error !== undefined ? { error: errorCode(call.error) } : {}) });
+        const error = scope ? 'firestore-quota' : call.error !== undefined ? errorCode(call.error) : undefined;
+        log?.({ tool: tool.name, kind: tool.kind, ok: !call.result.error, ms: Date.now() - started, ...(error ? { error } : {}), ...(billed !== undefined ? { reads: billed } : {}) });
         if (signInEnded(call.error)) await onRevoked?.().catch(() => {});
         return toMcp(call.result);
       },
@@ -65,3 +106,7 @@ export function buildServer(session: Session, { allow, log, onRevoked }: ServerO
   }
   return server;
 }
+
+/** The language for an answer given before any read: the call's `lang`, the grant's, else English. */
+const requestLang = (session: Session, args: Record<string, unknown>): Lang =>
+  isLang(args.lang) ? args.lang : session.props.lang ?? 'en';

@@ -1,5 +1,6 @@
 import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
 import type { AuthRestOptions } from '@huishouden/pwa-kit/firebase-auth-rest';
+import type { ReadBudget } from './read-budget';
 
 /** Bindings and settings (wrangler.toml). Everything here is public except the KV contents. */
 export interface Env {
@@ -10,6 +11,12 @@ export interface Env {
   TOOL_LIMITER?: RateLimit;
   /** Writing tool calls per connected assistant per minute. */
   WRITE_LIMITER?: RateLimit;
+  /** The day's Firestore reads, every connection's and each one's (src/read-budget.ts). */
+  READ_BUDGET?: DurableObjectNamespace<ReadBudget>;
+  /** Firestore reads a day for every connection together; unset or 0: no limit (src/reads.ts). */
+  FIRESTORE_CONNECTOR_READS?: string;
+  /** Firestore reads a day for one connection; unset or 0: no limit. */
+  FIRESTORE_CONNECTION_READS?: string;
   /** The Firebase project the household's data lives in. */
   FIREBASE_PROJECT_ID: string;
   /** The project's public web API key (it ships in every app), for Firebase Auth's token service. */

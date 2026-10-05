@@ -29,6 +29,8 @@ beforeAll(async () => {
     FIRESTORE_URL,
     SECURETOKEN_URL: `${AUTH_HOST}/securetoken.googleapis.com/v1`,
     IDENTITY_URL: `${AUTH_HOST}/identitytoolkit.googleapis.com/v1`,
+    // Small enough for the last test to use one connection's share up (src/reads.ts).
+    FIRESTORE_CONNECTION_READS: '60',
   };
   worker = spawn(['bunx', 'wrangler', 'dev', '--port', String(PORT), '--ip', '127.0.0.1', '--env', '', ...Object.entries(vars).flatMap(([k, v]) => ['--var', `${k}:${v}`])], {
     stdout: 'ignore',
@@ -244,5 +246,25 @@ describe('Health through the assistant', () => {
     const c = await carol.client.callTool({ name: 'health_medicines', arguments: { person: 'Nan' } });
     expect(c.isError).toBe(true);
     expect(text(c)).not.toContain('Examplamine');
+  }, 60_000);
+});
+
+describe('Firestore read budgets', () => {
+  test("a connection's day of reads runs out: firestore-quota, counted across requests; another connection goes on", async () => {
+    const bob = await connectAs(BOB);
+    let quota: { structuredContent?: Record<string, unknown>; isError?: boolean } | undefined;
+    let calls = 0;
+    for (; calls < 20 && !quota; calls++) {
+      const r = (await bob.client.callTool({ name: 'today', arguments: {} })) as { structuredContent?: Record<string, unknown>; isError?: boolean };
+      if (r.structuredContent?.error === 'firestore-quota') quota = r;
+      else expect(r.isError).toBeFalsy();
+      // The day's reads are added after the answer (ctx.waitUntil).
+      await Bun.sleep(100);
+    }
+    expect(calls).toBeGreaterThan(1);
+    expect(quota).toMatchObject({ isError: true, structuredContent: { error: 'firestore-quota', scope: 'connection' } });
+    const carol = await connectAs(CAROL);
+    const other = await carol.client.callTool({ name: 'today', arguments: {} });
+    expect(other.isError).toBeFalsy();
   }, 60_000);
 });

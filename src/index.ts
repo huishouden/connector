@@ -7,6 +7,10 @@ import { Session, sessionProps, type GrantProps } from './context';
 import { buildServer, type ToolCallLog } from './mcp';
 import { writeAudit } from './audit';
 import { defaultHandler } from './auth/routes';
+import { ReadMeter, readLimits } from './reads';
+import { durableStore } from './read-budget';
+
+export { ReadBudget } from './read-budget';
 
 /**
  * Huishouden connector: a remote MCP server (Streamable HTTP at /mcp) people add to their own AI
@@ -25,10 +29,15 @@ const log = (entry: ToolCallLog) => console.log(JSON.stringify({ event: 'tool', 
 async function mcp(request: Request, env: Env, ctx: ExecutionContext & { props: GrantProps; auth: { token: string } }): Promise<Response> {
   const props = ctx.props;
   const cache = tokenCache(env);
-  const db = new FirestoreRest({ projectId: env.FIREBASE_PROJECT_ID, token: async () => (await cache.get(props.refreshToken)).token, baseUrl: firestoreBase(env) });
+  const reads = new ReadMeter(env.READ_BUDGET ? durableStore(env.READ_BUDGET) : null, readLimits(env), props.connectionId, Date.now, (e) =>
+    console.log(JSON.stringify({ event: 'read-budget', ok: false, error: e instanceof Error ? e.name : 'unknown' })),
+  );
+  const db = new FirestoreRest({ projectId: env.FIREBASE_PROJECT_ID, token: async () => (await cache.get(props.refreshToken)).token, baseUrl: firestoreBase(env), fetch: reads.fetch((url, init) => fetch(url, init)) });
   const session = new Session(sessionProps(props), db, env.SITE_URL, Date.now, (householdId, entry) => ctx.waitUntil(writeAudit(db, props, householdId, entry, Date.now())));
   const server = buildServer(session, {
     log,
+    reads,
+    defer: (work) => ctx.waitUntil(work),
     allow: async (kind) => {
       const key = props.connectionId;
       const all = env.TOOL_LIMITER ? (await env.TOOL_LIMITER.limit({ key })).success : true;

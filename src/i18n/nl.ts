@@ -12,6 +12,10 @@ const nl: Record<keyof typeof en, string> = {
   'consent.revoke': 'Je kunt de verbinding altijd verbreken via het accountmenu: Gebruiken met je AI-assistent.',
   'consent.error': 'Dit verbindingsverzoek kan niet worden gebruikt: {reason}. Begin opnieuw vanuit je assistent.',
   'consent.expired': 'Deze pagina is verlopen of in een andere browser geopend. Begin opnieuw vanuit je assistent.',
+
+  'quota.connection': 'Deze assistent heeft zijn deel van Huishouden voor vandaag gebruikt. Dat begint opnieuw om middernacht Pacific-tijd; de apps blijven intussen gewoon werken.',
+  'quota.connector': 'AI-assistenten hebben hun deel van Huishouden voor vandaag gebruikt. Dat begint opnieuw om middernacht Pacific-tijd; de apps blijven intussen gewoon werken.',
+  'quota.project': 'Huishouden heeft zijn gratis dagelijkse tegoed gebruikt en kan tot middernacht Pacific-tijd niets lezen. Probeer het daarna opnieuw.',
 };
 
 export default nl;

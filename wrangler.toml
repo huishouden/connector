@@ -27,12 +27,27 @@ name = "WRITE_LIMITER"
 namespace_id = "7302"
 simple = { limit = 20, period = 60 }
 
+# The day's Firestore reads, every connection's and each one's (src/read-budget.ts). SQLite-backed:
+# the only kind on the free plan.
+[[durable_objects.bindings]]
+name = "READ_BUDGET"
+class_name = "ReadBudget"
+
+[[migrations]]
+tag = "v1-read-budget"
+new_sqlite_classes = ["ReadBudget"]
+
 # Public values. The project's web API key ships in every app too, but is set with
 # `wrangler secret put FIREBASE_API_KEY` (and `--env staging`) so key scanners stay quiet. Nothing
 # else is secret: the connector acts with each person's own sign-in, never a service account.
 [vars]
 FIREBASE_PROJECT_ID = "huishouden-piekstra"
 SITE_URL = "https://huishouden-piekstra.web.app"
+# Firestore reads a day the connector may use, of the free plan's 50,000 shared with every app and
+# Worker (pwa-kit docs/one-site.md "Budgets"), and one connection's share of that. Over either, a
+# tool call answers `firestore-quota` until midnight Pacific (src/reads.ts).
+FIRESTORE_CONNECTOR_READS = "4000"
+FIRESTORE_CONNECTION_READS = "1000"
 
 # Staging: the same Worker against huishouden-staging (PRs' signed-in tests run there).
 [env.staging]
@@ -53,6 +68,12 @@ name = "WRITE_LIMITER"
 namespace_id = "7304"
 simple = { limit = 20, period = 60 }
 
+[[env.staging.durable_objects.bindings]]
+name = "READ_BUDGET"
+class_name = "ReadBudget"
+
 [env.staging.vars]
 FIREBASE_PROJECT_ID = "huishouden-staging"
 SITE_URL = "https://huishouden-staging.web.app"
+FIRESTORE_CONNECTOR_READS = "4000"
+FIRESTORE_CONNECTION_READS = "1000"
