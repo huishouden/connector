@@ -2,11 +2,11 @@ import OAuthProvider, { OAuthError } from '@cloudflare/workers-oauth-provider';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { exchangeRefreshToken, FirebaseAuthError, IdTokenCache } from '@huishouden/pwa-kit/firebase-auth-rest';
 import { FirestoreRest } from '@huishouden/pwa-kit/firestore-rest';
-import { firestoreBase, type Env } from './env';
+import { authOptions, firestoreBase, type Env } from './env';
 import { Session, sessionProps, type GrantProps } from './context';
 import { buildServer, type ToolCallLog } from './mcp';
 import { writeAudit } from './audit';
-import { authOptions, defaultHandler } from './auth/routes';
+import { defaultHandler } from './auth/routes';
 
 /**
  * Huishouden connector: a remote MCP server (Streamable HTTP at /mcp) people add to their own AI

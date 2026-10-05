@@ -1,12 +1,4 @@
-import type { AuthRestOptions } from '@huishouden/pwa-kit/firebase-auth-rest';
 import type { Env } from '../env';
-
-export const authOptions = (env: Env): AuthRestOptions => ({
-  projectId: env.FIREBASE_PROJECT_ID,
-  apiKey: env.FIREBASE_API_KEY,
-  ...(env.SECURETOKEN_URL ? { securetokenUrl: env.SECURETOKEN_URL } : {}),
-  ...(env.IDENTITY_URL ? { identityUrl: env.IDENTITY_URL } : {}),
-});
 
 /** CORS for the portal's calls: its own origin only. */
 export function cors(env: Env, request: Request): Headers | null {
