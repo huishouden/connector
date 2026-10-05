@@ -37,7 +37,7 @@ same key writes nothing new.
 | `bills_due` | Open bills, amounts, due dates, autopay and pay links (admins and members only) |
 | `pet_today`, `pet_log_feeding`, `pet_log_dose` | The feeding board, care reminders and medicine courses; logging as the Pet app does |
 | `home_upkeep_due`, `home_add_event` | Upkeep jobs due and regular events; a new regular event (EventRule) or a booked visit |
-| `add_appointment` | Pet, baby, car, or health (on the calendars of the person's carers and the admins only) |
+| `add_appointment` | Pet, baby, car, or health: a visit in Health (kind, doctor, place or video link, what to bring, reminders, follow-up; notes only from admins and member carers), on the calendars and reminders of the person's carers, the person and the admins only |
 | `contacts_search`, `contacts_add` | The household's shared contacts |
 | `health_people` | The people this person looks after in Health |
 | `health_medicines` | Strength, dose, schedule, prescriber, pharmacy, supply and days left, refills, notes, allergies |
@@ -46,6 +46,7 @@ same key writes nothing new.
 | `health_log_dose` | Given or skipped, with Health's double-dose and as-needed guards (it asks before overriding) |
 | `health_add_medicine`, `health_update_medicine` | Add or change a medicine, stop or restart it, count the supply, mark a refill ordered |
 | `health_doctor_list` | Health's printable medicine list, as Markdown |
+| `health_appointments` | A person's visits, coming up and past (attended or missed), with doctor, place, prep, reminders and follow-up; notes only for admins and member carers |
 
 There are no delete tools. Every Health answer ends with a one-line note: these are the
 household's own records, not medical advice.
@@ -101,7 +102,7 @@ The browser and server halves are reusable kit modules, documented in
 | `@huishouden/pwa-kit/firestore-rest` | Firestore as the person: get, query, atomic commit |
 | `@huishouden/pwa-kit/local-clock` | The person's days on a UTC server |
 | `@huishouden/pwa-kit/home` | Reading the household's home (`toHome`) |
-| `@huishouden/pwa-kit/todo-core`, `/agenda-core`, `/contact-core`, `/role-core`, `/dose`, `/schedule` | The data contracts and app logic |
+| `@huishouden/pwa-kit/todo-core`, `/agenda-core`, `/contact-core`, `/role-core`, `/reminder-core`, `/dose`, `/visit`, `/schedule` | The data contracts and app logic |
 
 The calendar feed reuses the same modules.
 
@@ -124,7 +125,7 @@ The calendar feed reuses the same modules.
   connector checks the token with Firebase Auth, revokes the grant and its tokens, and removes the
   connection record. `GET /connections` lists the person's grants.
 - **Logs:** each tool call logs the tool name, read or write, the outcome, the duration and an error
-  code. Logs never contain names, emails, record ids, tokens or medicine names. The connector sends
+  code. Logs never contain names, emails, record ids, tokens, medicine names or what a visit is. The connector sends
   nothing to New Relic.
 
 ## Development
