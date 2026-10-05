@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { ALICE, CAROL, HELEN, KIM, NOW } from '../fixtures/household';
+import { ALICE, BOB, CAROL, HELEN, KIM, NOW } from '../fixtures/household';
 import { call, connect, owner, read, seed, type Connected } from '../helpers';
 
-let alice: Connected, helen: Connected, kim: Connected, carol: Connected;
+let alice: Connected, helen: Connected, kim: Connected, carol: Connected, bob: Connected;
 beforeAll(async () => {
   await seed();
-  [alice, helen, kim, carol] = await Promise.all([ALICE, HELEN, KIM, CAROL].map((e) => connect(e)));
+  [alice, helen, kim, carol, bob] = await Promise.all([ALICE, HELEN, KIM, CAROL, BOB].map((e) => connect(e)));
 });
 afterAll(async () => {
-  for (const c of [alice, helen, kim, carol]) await c.close();
+  for (const c of [alice, helen, kim, carol, bob]) await c.close();
 });
 
 describe('pet', () => {
@@ -72,12 +72,82 @@ describe('appointments and contacts', () => {
     expect((await read(`households/h1/carAppointments/${c.data.id}`))!.data).toMatchObject({ vehicleId: 'v1', location: 'Example Garage' });
   });
 
-  test("a health appointment goes on the calendars of the person's carers and the admins only", async () => {
-    const r = await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Cardiology follow-up', start: '2031-01-15T11:00' });
+  test("a health appointment is a visit in Health, on the calendars and reminders of the person's carers and the admins only", async () => {
+    const r = await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Cardiology follow-up', start: '2031-01-15T11:00', location: 'Example Heart Center', notes: 'Bring the ECG', doctor: 'Dr. Example', prep: ['Fasting from midnight'], bring_medicine_list: true, follow_up: { every: 3, unit: 'month' } });
     expect(r.isError).toBe(false);
-    expect((await read(`households/h1/personalAgenda/${r.data.id}`))!.data).toMatchObject({ app: 'assistant', kind: 'appointment', audience: ['alice@example.com', 'bob@example.com', 'helen@example.com'], private: true, who: 'Nan' });
-    expect((await call(carol, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
-    expect((await call(kim, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
+    const at = Date.parse('2031-01-15T11:00:00-05:00');
+    expect((await read(`households/h1/healthPeople/nan/visits/${r.data.id}`))!.data).toMatchObject({ personId: 'nan', kind: 'specialist', title: 'Cardiology follow-up', at, contactId: 'doc1', location: 'Example Heart Center', prep: ['Fasting from midnight'], medList: true, remindBefore: [1440, 120], followUp: { every: 3, unit: 'month' }, by: ALICE, via: 'assistant' });
+    expect((await read(`households/h1/healthPeople/nan/visitNotes/${r.data.id}`))!.data).toMatchObject({ text: 'Bring the ECG', by: ALICE, via: 'assistant' });
+    const agenda = await owner.query('households/h1', 'personalAgenda', { where: [{ field: 'ref', op: 'EQUAL', value: `visit:nan:${r.data.id}` }] });
+    expect(agenda).toHaveLength(1);
+    expect(agenda[0].data).toMatchObject({ app: 'health', kind: 'appointment', title: 'Appointment for Nan', start: at, audience: [ALICE, 'bob@example.com', HELEN], private: true, who: 'Nan' });
+    expect(agenda[0].data.calendarDetail).toBe('Specialist: Cardiology follow-up with Dr. Example · Example Heart Center · Fasting from midnight · bring the medicine list');
+    expect(JSON.stringify(agenda[0].data)).not.toContain('ECG');
+    const reminders = await owner.query('households/h1', 'personalReminders', { where: [{ field: 'ref', op: 'EQUAL', value: `health:visit:${r.data.id}` }] });
+    expect(reminders.map((x) => x.data.at).sort()).toEqual([at - 86_400_000, at - 2 * 3_600_000]);
+    expect(reminders[0].data).toMatchObject({ app: 'health', recipients: ['bob@example.com', HELEN], title: 'Appointment for Nan' });
+    expect(JSON.stringify(reminders.map((x) => x.data))).not.toContain('ECG');
+    // A helper carer adds one without notes; with notes, refused. Others, never.
+    expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Dentist', start: '2031-01-20T09:00' })).isError).toBe(false);
+    expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Refused dentist', start: '2031-01-21T09:00', notes: 'x' })).isError).toBe(true);
+    expect((await call(carol, 'add_appointment', { app: 'health', person: 'Nan', title: 'Refused X', start: '2031-01-22T09:00' })).isError).toBe(true);
+    expect((await call(kim, 'add_appointment', { app: 'health', person: 'Nan', title: 'Refused X', start: '2031-01-23T09:00' })).isError).toBe(true);
+    // A refused call leaves nothing behind: no visit, no calendar item, no reminder.
+    const visits = await owner.query('households/h1/healthPeople/nan', 'visits');
+    expect(visits.filter((v) => String(v.data.title).startsWith('Refused'))).toEqual([]);
+    // Every calendar item and reminder for Nan's visits belongs to a visit that exists.
+    const ids = new Set(visits.map((v) => v.id));
+    for (const a of await owner.query('households/h1', 'personalAgenda', { where: [{ field: 'app', op: 'EQUAL', value: 'health' }] })) expect(ids.has(String(a.data.ref).split(':')[2])).toBe(true);
+    for (const x of await owner.query('households/h1', 'personalReminders', { where: [{ field: 'app', op: 'EQUAL', value: 'health' }] })) {
+      if (String(x.data.ref).startsWith('health:visit:')) expect(ids.has(String(x.data.ref).split(':')[2])).toBe(true);
+    }
+    // The logs say which tool and how it went, never who, what or where.
+    await Promise.all([alice.settled(), helen.settled()]);
+    const logs = JSON.stringify([...alice.logs, ...helen.logs, ...carol.logs, ...kim.logs]);
+    expect(logs).not.toMatch(/Cardiology|ECG|Heart Center|Fasting|Nan|Dr\. Example|Dentist|@/);
+    for (const l of [...alice.logs, ...helen.logs]) expect(['read', 'write']).toContain(l.kind);
+  });
+
+  test('a private doctor is named only where no helper carer reads', async () => {
+    await owner.commit([{ path: 'households/h1/contacts/doc2', set: { name: 'Dr. Private', role: 'Doctor', apps: ['health'], private: true, createdAt: 1, by: ALICE } }]);
+    const r = await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Skin check', start: '2031-01-28T10:00', doctor: 'Dr. Private' });
+    expect(r.isError).toBe(false);
+    // Helen, a helper carer, reads Nan's calendar item and reminders: the doctor isn't in them.
+    const published = [
+      ...(await owner.query('households/h1', 'personalAgenda', { where: [{ field: 'ref', op: 'EQUAL', value: `visit:nan:${r.data.id}` }] })),
+      ...(await owner.query('households/h1', 'personalReminders', { where: [{ field: 'ref', op: 'EQUAL', value: `health:visit:${r.data.id}` }] })),
+    ];
+    expect(published.length).toBeGreaterThan(0);
+    expect(JSON.stringify(published.map((d) => d.data))).not.toContain('Dr. Private');
+    expect(JSON.stringify(await call(helen, 'health_appointments', { person: 'Nan' }))).not.toContain('Dr. Private');
+    // Straight from Firestore too: the visit holds only the contact's id, and the rules refuse Helen the private contact.
+    expect(JSON.stringify(await helen.db.get(`households/h1/healthPeople/nan/visits/${r.data.id}`))).not.toContain('Dr. Private');
+    await expect(helen.db.get('households/h1/contacts/doc2')).rejects.toMatchObject({ code: 'permission-denied' });
+    // Alice and Bob may read private contacts, so their answers name the doctor.
+    for (const c of [alice, bob]) {
+      const visit = (await call(c, 'health_appointments', { person: 'Nan' })).data.visits.find((v: { id: string }) => v.id === r.data.id);
+      expect(visit.doctor).toMatchObject({ name: 'Dr. Private' });
+    }
+  });
+
+  test('health_appointments: the visits, notes only for keepers', async () => {
+    await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Eye exam', start: '2031-01-16T14:00', notes: 'Drops: no driving after', idempotency_key: 'eye-1' });
+    const forAlice = await call(alice, 'health_appointments', { person: 'Nan' });
+    const eye = forAlice.data.visits.find((v: { title: string }) => v.title === 'Eye exam');
+    expect(eye).toMatchObject({ kind: 'eye', state: 'upcoming', notes: 'Drops: no driving after', person: { id: 'nan', name: 'Nan' } });
+    const forHelen = await call(helen, 'health_appointments', {});
+    const seen = forHelen.data.visits.find((v: { title: string }) => v.title === 'Eye exam');
+    expect(seen).toBeTruthy();
+    expect(seen.notes).toBeUndefined();
+    expect(forHelen.text).not.toContain('no driving');
+    // The rules, not just the tool: Helen, a helper carer, can't read the notes directly; Carol and Kim not even the visit.
+    await expect(helen.db.get(`households/h1/healthPeople/nan/visitNotes/${eye.id}`)).rejects.toMatchObject({ code: 'permission-denied' });
+    for (const c of [carol, kim]) await expect(c.db.get(`households/h1/healthPeople/nan/visits/${eye.id}`)).rejects.toMatchObject({ code: 'permission-denied' });
+    // Bob, a member who cares for Nan, keeps the notes.
+    const forBob = await call(bob, 'health_appointments', { person: 'Nan' });
+    expect(forBob.data.visits.find((v: { id: string }) => v.id === eye.id)).toMatchObject({ notes: 'Drops: no driving after' });
+    expect((await call(kim, 'health_appointments', {})).isError).toBe(true);
+    expect((await call(carol, 'health_appointments', {})).data.visits).toEqual([]);
   });
 
   test("contacts: pay details reach admins and members only, and contacts_add never writes them", async () => {
