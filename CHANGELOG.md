@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1](https://github.com/huishouden/connector/compare/v0.3.0...v0.3.1) (2026-10-05)
+
+### Bug Fixes
+
+* Rebuild against the re-tagged kit ([637042a](https://github.com/huishouden/connector/commit/637042a2e1aaa547d085ba13acdba81821f0a648))
+
 ## 0.3.0 (2026-10-05)
 
 ### Features
