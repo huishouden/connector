@@ -1,50 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker-provider.js';
-import { FirestoreError } from '@huishouden/pwa-kit/firestore-rest';
-import { FirebaseAuthError } from '@huishouden/pwa-kit/firebase-auth-rest';
-import type { Lang } from '@huishouden/pwa-kit/i18n';
-import { UserError, type AuditEntry, type Session } from './context';
-import { failureText, render, toMcp, type ToolDef } from './tools/registry';
-import { calendar, householdHome, households, today, todos } from './tools/overview';
-import { groceriesAdd, groceriesCheck, groceriesList, tasksAdd, todoCancel, todoDone } from './tools/lists';
-import { billsDue } from './tools/money';
-import { petLogDose, petLogFeeding, petToday } from './tools/pet';
-import { homeAddEvent, homeUpkeepDue } from './tools/home';
-import { addAppointment, contactsAdd, contactsSearch } from './tools/people';
-import { healthAddMedicine, healthDoctorList, healthDue, healthHistory, healthLogDose, healthMedicines, healthPeople, healthUpdateMedicine } from './tools/health';
-import { t } from './i18n';
+import { errorCode, runTool, signInEnded, TOOLS, type Session, type ToolResult } from '@huishouden/pwa-kit/household-tools';
 
-/** Every tool, in the order clients list them. */
-export const TOOLS: ToolDef[] = [
-  households,
-  householdHome,
-  today,
-  calendar,
-  todos,
-  todoDone,
-  todoCancel,
-  groceriesList,
-  groceriesAdd,
-  groceriesCheck,
-  tasksAdd,
-  billsDue,
-  petToday,
-  petLogFeeding,
-  petLogDose,
-  homeUpkeepDue,
-  homeAddEvent,
-  addAppointment,
-  contactsSearch,
-  contactsAdd,
-  healthPeople,
-  healthMedicines,
-  healthHistory,
-  healthDue,
-  healthLogDose,
-  healthAddMedicine,
-  healthUpdateMedicine,
-  healthDoctorList,
-] as ToolDef[];
+export { TOOLS };
 
 export const INSTRUCTIONS = [
   "Huishouden is this person's household organiser: a shared calendar and to-do list fed by apps for groceries, tasks, pets, a baby, the house, cars, bills and Health (medicines for the people they care for).",
@@ -73,8 +31,14 @@ export interface ServerOptions {
   onRevoked?: () => Promise<void>;
 }
 
-const errorCode = (e: unknown) =>
-  e instanceof UserError ? `user:${e.key}` : e instanceof FirestoreError ? `firestore:${e.code}` : e instanceof FirebaseAuthError ? `auth:${e.kind}` : e instanceof Error ? e.name : 'unknown';
+/** The MCP result for a tool's answer. */
+export function toMcp(result: ToolResult) {
+  return {
+    content: [{ type: 'text' as const, text: result.text }],
+    ...(result.data ? { structuredContent: result.data } : {}),
+    ...(result.error ? { isError: true } : {}),
+  };
+}
 
 /** An MCP server for one request, its tools acting as `session`'s person. */
 export function buildServer(session: Session, { allow, log, onRevoked }: ServerOptions = {}): McpServer {
@@ -90,31 +54,12 @@ export function buildServer(session: Session, { allow, log, onRevoked }: ServerO
       },
       async (args: Record<string, unknown>) => {
         const started = Date.now();
-        let lang: Lang = 'en';
-        let householdId: string | undefined;
-        let touched: Pick<AuditEntry, 'app' | 'ref'> = {};
-        const finish = (ok: boolean, error?: unknown) => {
-          if (householdId) session.record(householdId, { tool: tool.name, kind: tool.kind, ok, ...touched });
-          log?.({ tool: tool.name, kind: tool.kind, ok, ms: Date.now() - started, ...(error !== undefined ? { error: errorCode(error) } : {}) });
-        };
-        try {
-          lang = await session.lang(undefined, args.lang as string | undefined);
-          if (allow && !(await allow(tool.kind))) {
-            finish(false, new UserError('error.rateLimited'));
-            return toMcp({ text: render(lang, () => t('error.rateLimited')), error: true }, lang);
-          }
-          const here = await session.here(args.household as string | undefined);
-          householdId = here.id;
-          lang = await session.lang(here.id, args.lang as string | undefined);
-          const clock = await session.clock(here.id, args.time_zone as string | undefined);
-          const result = await tool.run({ session, here, clock, lang, touched: (app, ref) => (touched = { app, ...(ref ? { ref } : {}) }) }, args as never);
-          finish(!result.error);
-          return toMcp(result, lang, tool.health);
-        } catch (e) {
-          finish(false, e);
-          if (e instanceof FirebaseAuthError && e.kind === 'revoked') await onRevoked?.().catch(() => {});
-          return toMcp({ text: failureText(e, lang), error: true }, lang, tool.health);
-        }
+        // The tools themselves are @huishouden/pwa-kit/household-tools, shared with `hh data`.
+        const call = await runTool(session, tool, args, { allow });
+        if (call.householdId) session.record(call.householdId, { tool: tool.name, kind: tool.kind, ok: !call.result.error, ...call.touched });
+        log?.({ tool: tool.name, kind: tool.kind, ok: !call.result.error, ms: Date.now() - started, ...(call.error !== undefined ? { error: errorCode(call.error) } : {}) });
+        if (signInEnded(call.error)) await onRevoked?.().catch(() => {});
+        return toMcp(call.result);
       },
     );
   }
