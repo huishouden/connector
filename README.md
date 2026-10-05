@@ -173,9 +173,10 @@ secrets; until then the deploy job is skipped with a notice.
 
 1. Cloudflare dashboard > My Profile > API Tokens > Create Token > "Edit Cloudflare Workers"
    template, limited to this account.
-2. Add the token as `CLOUDFLARE_API_TOKEN` and the account id as `CLOUDFLARE_ACCOUNT_ID`:
-   `gh secret set CLOUDFLARE_API_TOKEN -R huishouden/connector` and
-   `gh secret set CLOUDFLARE_ACCOUNT_ID -R huishouden/connector`.
+2. Add the token as `CLOUDFLARE_API_TOKEN` and the account id as `CLOUDFLARE_ACCOUNT_ID`, secrets
+   of the `production` environment (deployment branches: `main` alone, so no other branch's run
+   can read them): `hh ops secret set connector CLOUDFLARE_API_TOKEN --env production` and
+   `hh ops secret set connector CLOUDFLARE_ACCOUNT_ID --env production`, each value on stdin.
 
 ## License
 
