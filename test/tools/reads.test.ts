@@ -97,4 +97,19 @@ describe('read budgets with the tools', () => {
     expect(r.data).toMatchObject({ error: 'firestore-quota', scope: 'connection' });
     expect(meter.wrote).toBe(false);
   });
+
+  test("calls sent at once (as a batch) run one at a time: each is counted and answered as its own", async () => {
+    const { c, store } = await connectWith({ connector: Infinity, connection: Infinity });
+    await call(c, 'households');
+    // Alone first, on the same (warm) session: what each costs.
+    await call(c, 'today');
+    await call(c, 'groceries_list');
+    const alone = Object.fromEntries(c.logs.slice(-2).map((l) => [l.tool, l.reads]));
+    const before = (await store.used(DAY, 'x')).connector;
+    const [a, b] = await Promise.all([call(c, 'today'), call(c, 'groceries_list')]);
+    expect([a.isError, b.isError]).toEqual([false, false]);
+    const together = Object.fromEntries(c.logs.slice(-2).map((l) => [l.tool, l.reads]));
+    expect(together).toEqual(alone);
+    expect((await store.used(DAY, 'x')).connector - before).toBe(alone.today! + alone.groceries_list!);
+  });
 });
