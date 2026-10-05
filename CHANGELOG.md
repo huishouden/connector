@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0](https://github.com/huishouden/connector/compare/v0.3.1...v0.4.0) (2026-10-05)
+
+### Features
+
+* `pet_log_outing` and outings in `pet_today` (pwa-kit 0.105.0): a pet's bathroom breaks against its daily poop minimum, days in a row under it, walks; logging an outing ticks the scheduled one Pet shows, and a retry with the same key writes nothing new.
+
 ## [0.3.1](https://github.com/huishouden/connector/compare/v0.3.0...v0.3.1) (2026-10-05)
 
 ### Bug Fixes

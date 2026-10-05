@@ -35,7 +35,7 @@ same key writes nothing new.
 | `groceries_list`, `groceries_add`, `groceries_check` | Shopping lists, in the Groceries app's shapes (including staples) |
 | `tasks_add` | A task, with an optional due date or time |
 | `bills_due` | Open bills, amounts, due dates, autopay and pay links (admins and members only) |
-| `pet_today`, `pet_log_feeding`, `pet_log_dose` | The feeding board, care reminders and medicine courses; logging as the Pet app does |
+| `pet_today`, `pet_log_feeding`, `pet_log_dose`, `pet_log_outing` | The feeding board, care reminders, medicine courses and outings (bathroom breaks, walks); logging as the Pet app does |
 | `home_upkeep_due`, `home_add_event` | Upkeep jobs due and regular events; a new regular event (EventRule) or a booked visit |
 | `add_appointment` | Pet, baby or car: in that app's list, on the household calendar (`private` keeps it from helpers and kids). Health: a visit in Health (kind, doctor, place or video link, what to bring, reminders, follow-up; notes only from admins and member carers); its calendar item and reminders reach only the person's carers, the person and the admins |
 | `contacts_search`, `contacts_add` | The household's shared contacts |
