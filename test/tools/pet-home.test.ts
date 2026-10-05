@@ -72,12 +72,40 @@ describe('appointments and contacts', () => {
     expect((await read(`households/h1/carAppointments/${c.data.id}`))!.data).toMatchObject({ vehicleId: 'v1', location: 'Example Garage' });
   });
 
-  test("a health appointment goes on the calendars of the person's carers and the admins only", async () => {
-    const r = await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Cardiology follow-up', start: '2031-01-15T11:00' });
+  test("a health appointment is a visit in Health, on the calendars and reminders of the person's carers and the admins only", async () => {
+    const r = await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Cardiology follow-up', start: '2031-01-15T11:00', location: 'Example Heart Center', notes: 'Bring the ECG', doctor: 'Dr. Example', prep: ['Fasting from midnight'], bring_medicine_list: true, follow_up: { every: 3, unit: 'month' } });
     expect(r.isError).toBe(false);
-    expect((await read(`households/h1/personalAgenda/${r.data.id}`))!.data).toMatchObject({ app: 'assistant', kind: 'appointment', audience: ['alice@example.com', 'bob@example.com', 'helen@example.com'], private: true, who: 'Nan' });
+    const at = Date.parse('2031-01-15T11:00:00-05:00');
+    expect((await read(`households/h1/healthPeople/nan/visits/${r.data.id}`))!.data).toMatchObject({ personId: 'nan', kind: 'specialist', title: 'Cardiology follow-up', at, contactId: 'doc1', location: 'Example Heart Center', prep: ['Fasting from midnight'], medList: true, remindBefore: [1440, 120], followUp: { every: 3, unit: 'month' }, by: ALICE, via: 'assistant' });
+    expect((await read(`households/h1/healthPeople/nan/visitNotes/${r.data.id}`))!.data).toMatchObject({ text: 'Bring the ECG', by: ALICE, via: 'assistant' });
+    const agenda = await owner.query('households/h1', 'personalAgenda', { where: [{ field: 'ref', op: 'EQUAL', value: `visit:nan:${r.data.id}` }] });
+    expect(agenda).toHaveLength(1);
+    expect(agenda[0].data).toMatchObject({ app: 'health', kind: 'appointment', title: 'Appointment for Nan', start: at, audience: [ALICE, 'bob@example.com', HELEN], private: true, who: 'Nan' });
+    expect(agenda[0].data.calendarDetail).toBe('Specialist: Cardiology follow-up with Dr. Example · Example Heart Center · Fasting from midnight · bring the medicine list');
+    expect(JSON.stringify(agenda[0].data)).not.toContain('ECG');
+    const reminders = await owner.query('households/h1', 'personalReminders', { where: [{ field: 'ref', op: 'EQUAL', value: `health:visit:${r.data.id}` }] });
+    expect(reminders.map((x) => x.data.at).sort()).toEqual([at - 86_400_000, at - 2 * 3_600_000]);
+    expect(reminders[0].data).toMatchObject({ app: 'health', recipients: ['bob@example.com', HELEN], title: 'Appointment for Nan' });
+    expect(JSON.stringify(reminders.map((x) => x.data))).not.toContain('ECG');
+    // A helper carer adds one without notes; with notes, refused. Others, never.
+    expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Dentist', start: '2031-01-20T09:00' })).isError).toBe(false);
+    expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Dentist', start: '2031-01-20T09:00', notes: 'x' })).isError).toBe(true);
     expect((await call(carol, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
     expect((await call(kim, 'add_appointment', { app: 'health', person: 'Nan', title: 'X', start: '2031-01-15T11:00' })).isError).toBe(true);
+  });
+
+  test('health_appointments: the visits, notes only for keepers', async () => {
+    await call(alice, 'add_appointment', { app: 'health', person: 'Nan', title: 'Eye exam', start: '2031-01-16T14:00', notes: 'Drops: no driving after', idempotency_key: 'eye-1' });
+    const forAlice = await call(alice, 'health_appointments', { person: 'Nan' });
+    const eye = forAlice.data.visits.find((v: { title: string }) => v.title === 'Eye exam');
+    expect(eye).toMatchObject({ kind: 'eye', state: 'upcoming', notes: 'Drops: no driving after', person: { id: 'nan', name: 'Nan' } });
+    const forHelen = await call(helen, 'health_appointments', {});
+    const seen = forHelen.data.visits.find((v: { title: string }) => v.title === 'Eye exam');
+    expect(seen).toBeTruthy();
+    expect(seen.notes).toBeUndefined();
+    expect(forHelen.text).not.toContain('no driving');
+    expect((await call(kim, 'health_appointments', {})).isError).toBe(true);
+    expect((await call(carol, 'health_appointments', {})).data.visits).toEqual([]);
   });
 
   test("contacts: pay details reach admins and members only, and contacts_add never writes them", async () => {
