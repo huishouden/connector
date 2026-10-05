@@ -18,7 +18,7 @@ describe('tools/list', () => {
   test('every tool is listed with a description and an input schema', async () => {
     const { tools } = await alice.client.listTools();
     expect(tools.map((t) => t.name)).toEqual(TOOLS.map((t) => t.name));
-    expect(tools).toHaveLength(29);
+    expect(tools).toHaveLength(30);
     for (const t of tools) {
       expect(t.description!.length).toBeGreaterThan(40);
       expect(t.inputSchema.type).toBe('object');
