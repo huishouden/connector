@@ -13,4 +13,9 @@ export default {
   'consent.revoke': 'You can disconnect it any time from the account menu: Use with your AI assistant.',
   'consent.error': 'This connection request can\'t be used: {reason}. Start again from your assistant.',
   'consent.expired': 'This page has expired or was opened in another browser. Start again from your assistant.',
+
+  // A tool call refused for Firestore reads (src/reads.ts): the answer's text, `firestore-quota` in its data.
+  'quota.connection': 'This assistant has used its share of Huishouden for today. It resets at midnight Pacific time; the apps keep working meanwhile.',
+  'quota.connector': 'AI assistants have used their share of Huishouden for today. It resets at midnight Pacific time; the apps keep working meanwhile.',
+  'quota.project': 'Huishouden has used its free daily allowance and can\'t read anything until midnight Pacific time. Try again after that.',
 } as const;

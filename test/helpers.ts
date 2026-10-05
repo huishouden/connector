@@ -6,6 +6,7 @@ import { Session, sessionProps, type GrantProps } from '../src/context';
 import { buildServer, type ToolCallLog } from '../src/mcp';
 import { writeAudit, forgetConnections } from '../src/audit';
 import { householdDocs, NOW, PROJECT } from './fixtures/household';
+import type { ReadMeter } from '../src/reads';
 
 /** The emulators `firebase emulators:exec` starts (firebase.json). */
 export const FIRESTORE_URL = 'http://127.0.0.1:8080/v1';
@@ -72,15 +73,15 @@ export interface Connected {
 }
 
 /** An MCP client talking to the connector's server as `email`, through the emulators, at NOW. */
-export async function connect(email: string, { now = NOW, lang, timeZone }: { now?: number; lang?: GrantProps['lang']; timeZone?: string } = {}): Promise<Connected> {
+export async function connect(email: string, { now = NOW, lang, timeZone, reads }: { now?: number; lang?: GrantProps['lang']; timeZone?: string; reads?: ReadMeter } = {}): Promise<Connected> {
   const { uid, refreshToken } = await signIn(email);
   const props: GrantProps = { uid, email, refreshToken, connectionId: `test${email.split('@')[0]}`, client: 'Test assistant', ...(lang ? { lang } : {}), ...(timeZone ? { timeZone } : {}) };
   const cache = new IdTokenCache((r) => exchangeRefreshToken(AUTH, r));
-  const db = new FirestoreRest({ projectId: PROJECT, token: async () => (await cache.get(refreshToken)).token, baseUrl: FIRESTORE_URL });
+  const db = new FirestoreRest({ projectId: PROJECT, token: async () => (await cache.get(refreshToken)).token, baseUrl: FIRESTORE_URL, ...(reads ? { fetch: reads.fetch((url, init) => fetch(url, init)) } : {}) });
   const pending: Promise<void>[] = [];
   const session = new Session(sessionProps(props), db, 'https://huishouden-staging.web.app', () => now, (h, entry) => pending.push(writeAudit(db, props, h, entry, now)));
   const logs: ToolCallLog[] = [];
-  const server = buildServer(session, { log: (e) => logs.push(e) });
+  const server = buildServer(session, { log: (e) => logs.push(e), ...(reads ? { reads } : {}) });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(a);
   const client = new Client({ name: 'test', version: '1.0.0' });

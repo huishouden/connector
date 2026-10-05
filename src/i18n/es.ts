@@ -12,6 +12,10 @@ const es: Record<keyof typeof en, string> = {
   'consent.revoke': 'Puedes desconectarlo cuando quieras desde el menú de la cuenta: Usar con tu asistente de IA.',
   'consent.error': 'Esta solicitud de conexión no se puede usar: {reason}. Vuelve a empezar desde tu asistente.',
   'consent.expired': 'Esta página caducó o se abrió en otro navegador. Vuelve a empezar desde tu asistente.',
+
+  'quota.connection': 'Este asistente ya usó su parte de Huishouden por hoy. Se renueva a medianoche, hora del Pacífico; mientras tanto, las apps siguen funcionando.',
+  'quota.connector': 'Los asistentes de IA ya usaron su parte de Huishouden por hoy. Se renueva a medianoche, hora del Pacífico; mientras tanto, las apps siguen funcionando.',
+  'quota.project': 'Huishouden ya usó su asignación gratuita diaria y no puede leer nada hasta la medianoche, hora del Pacífico. Inténtalo de nuevo después.',
 };
 
 export default es;
