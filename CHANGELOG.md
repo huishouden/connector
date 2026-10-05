@@ -1,11 +1,5 @@
 # Changelog
 
-## [0.4.1](https://github.com/huishouden/connector/compare/v0.4.0...v0.4.1) (2026-10-05)
-
-### Bug Fixes
-
-* The end-to-end tool list expects 30 tools, with `pet_log_outing` (0.4.0 deployed nothing: its e2e still counted 29).
-
 ## [0.4.0](https://github.com/huishouden/connector/compare/v0.3.1...v0.4.0) (2026-10-05)
 
 ### Features
