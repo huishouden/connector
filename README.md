@@ -125,8 +125,8 @@ The calendar feed reuses the same modules.
   over either budget, or one that meets Firestore's own quota, answers `firestore-quota`, as the
   calendar Worker's API does: an error result whose data is `{ error: 'firestore-quota', scope:
   'connection' | 'connector' | 'project', resetsAt }`, with text in the person's language. A budget
-  met mid-call refuses the call's later reads, and the whole answer is the quota's. A write already
-  saved keeps its own answer. Reads a call makes at once all go out before any is counted, so the day
+  met mid-call refuses the call's later reads and writes, and the whole answer is the quota's. A
+  write already saved keeps its own answer. A request's tool calls run one at a time. Reads a call makes at once all go out before any is counted, so the day
   can end a call's reads over. Unset or `0`: no limit. If the Durable Object can't be reached, calls
   go ahead uncounted and a `read-budget` log line says so.
 - **Audit:** each tool call is written, as the person, to

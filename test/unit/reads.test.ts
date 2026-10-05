@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FirestoreError, FirestoreRest } from '@huishouden/pwa-kit/firestore-rest';
-import { billedReads, memoryStore, nextPacificMidnight, pacificDay, ReadMeter, readLimit, readLimits, type ReadStore } from '../../src/reads';
+import { billedReads, nextPacificMidnight, pacificDay, ReadMeter, readLimit, readLimits, type ReadStore } from '../../src/reads';
+import { memoryStore } from '../memory-store';
 import { overQuota, quotaResult } from '../../src/mcp';
 
 const ROOT = 'https://firestore.example/v1/projects/p/databases/(default)/documents';
@@ -118,7 +119,7 @@ describe('the meter', () => {
     expect(await (await meterWith({ connector: 99, connection: 49 }, { connector: 100, connection: 50 })).meter.begin()).toBeNull();
   });
 
-  test('met mid-call: later reads are refused as Firestore refuses at its quota, writes still go', async () => {
+  test('met mid-call: later reads are refused as Firestore refuses at its quota', async () => {
     const { store, meter } = await meterWith({ connector: 40, connection: 40 }, { connector: 100, connection: 50 });
     const fs = firestore(8);
     const db = new FirestoreRest({ projectId: 'p', token: async () => 't', baseUrl: 'https://firestore.example/v1', fetch: meter.fetch(fs.fetch) });
@@ -129,10 +130,20 @@ describe('the meter', () => {
     expect(overQuota(refused)).toBe(true);
     expect(fs.calls).toHaveLength(2);
     expect(meter.refused).toBe('connection');
-    await db.commit([{ path: 'households/h/todos/a', set: { title: 'x' } }]);
-    expect(fs.calls).toHaveLength(3);
     await meter.finish();
     expect((await store.used(DAY, 'c1')).connection).toBe(56);
+  });
+
+  test('after a refusal, a write in the same call is refused too; the next call starts afresh', async () => {
+    const { meter } = await meterWith({ connector: 49, connection: 49 }, { connector: 100, connection: 50 });
+    const fs = firestore(1);
+    const db = new FirestoreRest({ projectId: 'p', token: async () => 't', baseUrl: 'https://firestore.example/v1', fetch: meter.fetch(fs.fetch) });
+    await meter.begin();
+    await db.query('households/h', 'todos');
+    expect(overQuota(await db.query('households/h', 'todos').catch((e: unknown) => e))).toBe(true);
+    expect(overQuota(await db.commit([{ path: 'households/h/todos/a', set: { title: 'x' } }]).catch((e: unknown) => e))).toBe(true);
+    expect(fs.calls).toHaveLength(1);
+    expect(meter.wrote).toBe(false);
   });
 
   test("Firestore's own quota is the project's", async () => {

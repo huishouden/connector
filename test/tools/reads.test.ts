@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { ALICE, NOW } from '../fixtures/household';
 import { call, connect, read, seed, type Connected } from '../helpers';
-import { memoryStore, pacificDay, ReadMeter, type ReadLimits } from '../../src/reads';
+import { pacificDay, ReadMeter, type ReadLimits } from '../../src/reads';
+import { memoryStore } from '../memory-store';
 
 // The read budgets with the real tools, against the emulator: what a call costs, a call refused at
 // the start, one cut off mid-way, and a write that went through before its budget ran out.

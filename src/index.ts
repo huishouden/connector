@@ -32,8 +32,11 @@ async function mcp(request: Request, env: Env, ctx: ExecutionContext & { props: 
   const reads = new ReadMeter(env.READ_BUDGET ? durableStore(env.READ_BUDGET) : null, readLimits(env), props.connectionId, Date.now, (e) =>
     console.log(JSON.stringify({ event: 'read-budget', ok: false, error: e instanceof Error ? e.name : 'unknown' })),
   );
-  const db = new FirestoreRest({ projectId: env.FIREBASE_PROJECT_ID, token: async () => (await cache.get(props.refreshToken)).token, baseUrl: firestoreBase(env), fetch: reads.fetch((url, init) => fetch(url, init)) });
-  const session = new Session(sessionProps(props), db, env.SITE_URL, Date.now, (householdId, entry) => ctx.waitUntil(writeAudit(db, props, householdId, entry, Date.now())));
+  const firestore = { projectId: env.FIREBASE_PROJECT_ID, token: async () => (await cache.get(props.refreshToken)).token, baseUrl: firestoreBase(env) };
+  const db = new FirestoreRest({ ...firestore, fetch: reads.fetch((url, init) => fetch(url, init)) });
+  // The audit's writes read nothing and finish after the answer: kept off the tool calls' meter.
+  const auditDb = new FirestoreRest(firestore);
+  const session = new Session(sessionProps(props), db, env.SITE_URL, Date.now, (householdId, entry) => ctx.waitUntil(writeAudit(auditDb, props, householdId, entry, Date.now())));
   const server = buildServer(session, {
     log,
     reads,

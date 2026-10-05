@@ -159,6 +159,9 @@ export class ReadMeter {
     return async (url, init) => {
       const method = (init?.method ?? 'GET').toUpperCase();
       if (!isRead(method, url)) {
+        // A call that met a budget may have built its write from a refused read (a source record's
+        // `private`, an audience): nothing of it is written after that.
+        if (this.refused && url.split('?')[0].endsWith(':commit')) return exhausted();
         const res = await inner(url, init);
         if (res.ok && url.split('?')[0].endsWith(':commit')) this.wrote = true;
         return res;
@@ -175,23 +178,4 @@ export class ReadMeter {
       return res;
     };
   }
-}
-
-/** The day's reads in memory: tests, and `wrangler dev` without the Durable Object. */
-export function memoryStore(): ReadStore & { days: Map<string, Map<string, number>> } {
-  const days = new Map<string, Map<string, number>>();
-  const of = (day: string) => days.get(day) ?? days.set(day, new Map()).get(day)!;
-  return {
-    days,
-    async used(day, connection) {
-      const d = of(day);
-      return { connector: d.get('*') ?? 0, connection: d.get(connection) ?? 0 };
-    },
-    async add(day, connection, reads) {
-      for (const k of [...days.keys()]) if (k < day) days.delete(k);
-      const d = of(day);
-      d.set('*', (d.get('*') ?? 0) + reads);
-      d.set(connection, (d.get(connection) ?? 0) + reads);
-    },
-  };
 }

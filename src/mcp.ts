@@ -68,6 +68,37 @@ export function toMcp(result: ToolResult) {
 
 /** An MCP server for one request, its tools acting as `session`'s person. */
 export function buildServer(session: Session, { allow, log, onRevoked, reads, defer }: ServerOptions = {}): McpServer {
+  let turn: Promise<void> = Promise.resolve();
+  const callTool = async (tool: (typeof TOOLS)[number], args: Record<string, unknown>) => {
+    const started = Date.now();
+    let call: ToolCall | undefined;
+    let scope: QuotaScope | null = null;
+    let billed: number | undefined;
+    try {
+      const spent = reads ? await reads.begin() : null;
+      // The tools themselves are @huishouden/pwa-kit/household-tools, shared with `hh data`.
+      call = spent
+        ? { result: { text: '', error: true }, lang: requestLang(session, args), touched: {} }
+        : await runTool(session, tool, args, { allow });
+      scope = spent ?? reads?.refused ?? (overQuota(call.error) ? 'project' : null);
+      // A budget met mid-call refuses every read after it (and any write), and a tool may answer
+      // around a failed read: the whole answer is the quota's, never a partial one. A change saved
+      // before that keeps its own answer, so the assistant doesn't make it again.
+      if (scope && !(reads?.wrote && !call.result.error)) call.result = await quotaResult(scope, call.lang, (reads?.now ?? Date.now)());
+    } finally {
+      billed = reads?.reads;
+      if (reads) {
+        const done = reads.finish();
+        if (defer) defer(done);
+        else await done;
+      }
+      const error = scope ? 'firestore-quota' : !call ? 'thrown' : call.error !== undefined ? errorCode(call.error) : undefined;
+      log?.({ tool: tool.name, kind: tool.kind, ok: !!call && !call.result.error, ms: Date.now() - started, ...(error ? { error } : {}), ...(billed !== undefined ? { reads: billed } : {}) });
+    }
+    if (call.householdId) session.record(call.householdId, { tool: tool.name, kind: tool.kind, ok: !call.result.error, ...call.touched });
+    if (signInEnded(call.error)) await onRevoked?.().catch(() => {});
+    return toMcp(call.result);
+  };
   const server = new McpServer({ name: 'huishouden', title: 'Huishouden', version: '0.1.0' }, { instructions: INSTRUCTIONS, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
   for (const tool of TOOLS) {
     server.registerTool(
@@ -78,29 +109,12 @@ export function buildServer(session: Session, { allow, log, onRevoked, reads, de
         inputSchema: tool.input,
         annotations: { title: tool.title, readOnlyHint: tool.kind === 'read', destructiveHint: false, idempotentHint: tool.kind === 'read', openWorldHint: false },
       },
-      async (args: Record<string, unknown>) => {
-        const started = Date.now();
-        const spent = reads ? await reads.begin() : null;
-        // The tools themselves are @huishouden/pwa-kit/household-tools, shared with `hh data`.
-        const call: ToolCall = spent
-          ? { result: { text: '', error: true }, lang: requestLang(session, args), touched: {} }
-          : await runTool(session, tool, args, { allow });
-        const scope = spent ?? reads?.refused ?? (overQuota(call.error) ? 'project' : null);
-        // A budget met mid-call refuses every read after it, and a tool may answer around a failed
-        // read: the whole answer is the quota's, never a partial one. A change already saved keeps
-        // its own answer, so the assistant doesn't make it again.
-        if (scope && !(reads?.wrote && !call.result.error)) call.result = await quotaResult(scope, call.lang, (reads?.now ?? Date.now)());
-        const billed = reads?.reads;
-        if (reads) {
-          const done = reads.finish();
-          if (defer) defer(done);
-          else await done;
-        }
-        if (call.householdId) session.record(call.householdId, { tool: tool.name, kind: tool.kind, ok: !call.result.error, ...call.touched });
-        const error = scope ? 'firestore-quota' : call.error !== undefined ? errorCode(call.error) : undefined;
-        log?.({ tool: tool.name, kind: tool.kind, ok: !call.result.error, ms: Date.now() - started, ...(error ? { error } : {}), ...(billed !== undefined ? { reads: billed } : {}) });
-        if (signInEnded(call.error)) await onRevoked?.().catch(() => {});
-        return toMcp(call.result);
+      // One call at a time per request: the meter's counts are the call's (a JSON-RPC batch would
+      // otherwise run its calls at once on one meter).
+      (args: Record<string, unknown>) => {
+        const run = turn.then(() => callTool(tool, args));
+        turn = run.then(() => undefined, () => undefined);
+        return run;
       },
     );
   }
