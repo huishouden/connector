@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { ALICE, BOB, HELEN, HOME, KIM, MALLORY, CAROL, NOW } from '../fixtures/household';
 import { LocalClock } from '@huishouden/pwa-kit/local-clock';
-import { householdHome } from '../../src/tools/overview';
-import type { ToolContext } from '../../src/tools/registry';
+import { toolNamed, type ToolContext } from '@huishouden/pwa-kit/household-tools';
 import { call, connect, owner, read, seed, type Connected } from '../helpers';
 import { TOOLS } from '../../src/mcp';
 
@@ -79,7 +78,7 @@ describe('household_home', () => {
       lang: 'en',
       touched: () => {},
     } as unknown as ToolContext;
-    await expect(householdHome.run(ctx, {})).rejects.toMatchObject({ key: 'error.noSuchHousehold' });
+    await expect(toolNamed('household_home')!.run(ctx, {})).rejects.toMatchObject({ key: 'error.noSuchHousehold' });
   });
 
   test('an approximate home says so, and a household without one says how to add it', async () => {

@@ -1,12 +1,16 @@
 import { AuthorizationError, CimdFetchError, authorizationErrorRedirect, type ConsentDescription, type OAuthHelpers } from '@cloudflare/workers-oauth-provider';
-import { CALLBACK_PATH, HANDOFF_PATH, connectUrl, isHandoffRequest, storeHandoff, takeHandoff, type HandoffRequest } from '@huishouden/pwa-kit/signin-handoff';
-import { exchangeRefreshToken, verifyIdToken, FirebaseAuthError, type AuthRestOptions } from '@huishouden/pwa-kit/firebase-auth-rest';
+import { CALLBACK_PATH, CLI_HANDOFF_PATH, CLI_TOKEN_PATH, HANDOFF_PATH, connectUrl, isHandoffRequest, storeHandoff, takeHandoff, type HandoffRequest } from '@huishouden/pwa-kit/signin-handoff';
+import { exchangeRefreshToken, verifyIdToken, FirebaseAuthError } from '@huishouden/pwa-kit/firebase-auth-rest';
 import { FirestoreRest } from '@huishouden/pwa-kit/firestore-rest';
 import { isTimeZone } from '@huishouden/pwa-kit/local-clock';
 import { loadLang, matchLang, withLang, type Lang } from '@huishouden/pwa-kit/i18n';
 import { firestoreBase, type Env } from '../env';
 import type { GrantProps } from '../context';
 import { recordConnection } from '../audit';
+import { authOptions, cors, json } from './http';
+import { cliHandoff, cliToken } from './cli';
+
+export { authOptions };
 import { t } from '../i18n';
 
 /**
@@ -21,14 +25,11 @@ import { t } from '../i18n';
  *    Firebase refresh token to /connect/hand-off and sends the browser to /connect/callback.
  * 4. /connect/callback completes the grant: the refresh token goes into the grant's props, which
  *    workers-oauth-provider keeps encrypted in KV with a key only the client's tokens unwrap.
+ *
+ * The `hh` command line signs in through the same portal page with a loopback address and a PKCE
+ * proof key instead of a cookie (`@huishouden/pwa-kit/signin-handoff`, "Signing in from a command
+ * line" in its docs/server.md): the portal posts to /cli/hand-off, `hh` collects at /cli/token.
  */
-
-export const authOptions = (env: Env): AuthRestOptions => ({
-  projectId: env.FIREBASE_PROJECT_ID,
-  apiKey: env.FIREBASE_API_KEY,
-  ...(env.SECURETOKEN_URL ? { securetokenUrl: env.SECURETOKEN_URL } : {}),
-  ...(env.IDENTITY_URL ? { identityUrl: env.IDENTITY_URL } : {}),
-});
 
 const escape = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -109,19 +110,6 @@ async function authorizePost(request: Request, env: Env): Promise<Response> {
   headers.set('Location', connectUrl(env.SITE_URL, { service: origin, state, client: details.clientName, redirectHost: details.redirectHost, purpose: 'assistant' }));
   return new Response(null, { status: 302, headers });
 }
-
-/** CORS for the portal's calls: its own origin only. */
-function cors(env: Env, request: Request): Headers | null {
-  const origin = request.headers.get('Origin');
-  if (!origin || origin !== new URL(env.SITE_URL).origin) return null;
-  return new Headers({ 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600', Vary: 'Origin' });
-}
-
-const json = (body: unknown, status = 200, headers = new Headers()) => {
-  headers.set('Content-Type', 'application/json');
-  headers.set('Cache-Control', 'no-store');
-  return new Response(JSON.stringify(body), { status, headers });
-};
 
 /** Who signed in on the portal, kept for the callback. */
 type Handoff = HandoffRequest & { uid: string; email: string };
@@ -244,6 +232,8 @@ export async function defaultHandler(request: Request, env: Env, ctx: ExecutionC
     if (url.pathname === '/authorize') return request.method === 'POST' ? await authorizePost(request, env) : await authorizeGet(request, env);
     if (url.pathname === HANDOFF_PATH) return await handoff(request, env);
     if (url.pathname === CALLBACK_PATH) return await callback(request, env, ctx);
+    if (url.pathname === CLI_HANDOFF_PATH) return await cliHandoff(request, env);
+    if (url.pathname === CLI_TOKEN_PATH) return await cliToken(request, env);
     if (url.pathname === '/connections' || url.pathname === '/connections/revoke') return await connections(request, env);
     if (url.pathname === '/' && request.method === 'GET') return home(request, env);
     return new Response('Not found', { status: 404 });
