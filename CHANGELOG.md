@@ -4,7 +4,7 @@
 
 ### Features
 
-* **health:** `add_appointment` with app `health` writes a Health visit (kind, doctor, place, what to bring, reminders, follow-up; notes for admins and member carers) and puts it on the carers' calendars and reminders; the new `health_appointments` tool lists a person's visits (pwa-kit 0.97.0).
+* **health:** `add_appointment` with app `health` writes a Health visit (kind, doctor, place, what to bring, reminders, follow-up; notes for admins and member carers) and puts it on the carers' calendars and reminders; the new `health_appointments` tool lists a person's visits; a private doctor is never named where a helper carer reads (pwa-kit 0.101.0).
 
 ## [0.2.0](https://github.com/huishouden/connector/compare/v0.1.0...v0.2.0) (2026-10-05)
 
