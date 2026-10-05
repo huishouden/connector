@@ -168,14 +168,15 @@ the Cloudflare free plan.
 
 ### Deploy from GitHub Actions (optional)
 
-CI tests every push. It deploys staging and then production on `main` once the repository has these
-secrets; until then the deploy job is skipped with a notice.
+CI tests main on every push and manual run. It deploys staging and then production on `main` once the `production` environment has these
+secrets; until then the deploy job runs but deploys nothing, with a notice. Repository secrets of the same names also reach the job; once the environment holds the values, delete them (`gh secret delete CLOUDFLARE_API_TOKEN -R huishouden/connector`, and `gh secret delete CLOUDFLARE_ACCOUNT_ID -R huishouden/connector`). The environment itself (Settings > Environments > `production`, deployment branches: `main`) exists already.
 
 1. Cloudflare dashboard > My Profile > API Tokens > Create Token > "Edit Cloudflare Workers"
    template, limited to this account.
-2. Add the token as `CLOUDFLARE_API_TOKEN` and the account id as `CLOUDFLARE_ACCOUNT_ID`:
-   `gh secret set CLOUDFLARE_API_TOKEN -R huishouden/connector` and
-   `gh secret set CLOUDFLARE_ACCOUNT_ID -R huishouden/connector`.
+2. Add the token as `CLOUDFLARE_API_TOKEN` and the account id as `CLOUDFLARE_ACCOUNT_ID`, secrets
+   of the `production` environment (deployment branches: `main` alone, so no other branch's run
+   can read them): `hh ops secret set connector CLOUDFLARE_API_TOKEN --env production` and
+   `hh ops secret set connector CLOUDFLARE_ACCOUNT_ID --env production`, each value on stdin.
 
 ## License
 
