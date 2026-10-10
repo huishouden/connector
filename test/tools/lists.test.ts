@@ -25,7 +25,7 @@ describe('groceries', () => {
     expect(r.isError).toBe(false);
     const item = await read(`households/h1/items/${r.data.id}`);
     expect(item!.data).toEqual({
-      listId: 'groceries', name: 'Oat milk', category: 'Dairy & Eggs', quantity: '2', notes: '', addedBy: 'Helen', by: HELEN, completed: false, urgency: 'Need Today', position: -NOW, createdAt: NOW, updatedAt: NOW, completedAt: null, via: 'assistant',
+      listId: 'groceries', name: 'Oat milk', category: 'Dairy & Eggs', quantity: '2', notes: '', addedBy: 'Helen', by: HELEN, completed: false, urgency: 'Need Today', position: -NOW - 1e13, createdAt: NOW, updatedAt: NOW, completedAt: null, via: 'assistant',
     });
     expect((await read('households/h1/staples/oat milk'))!.data).toMatchObject({ displayName: 'Oat milk', timesAdded: 1 });
     const again = await call(helen, 'groceries_add', args);
