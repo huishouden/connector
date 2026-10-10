@@ -37,7 +37,7 @@ same key writes nothing new.
 | `bills_due` | Open bills, amounts, due dates, autopay and pay links (admins and members only) |
 | `pet_today`, `pet_log_feeding`, `pet_log_dose`, `pet_log_outing` | The feeding board, care reminders, medicine courses and outings (bathroom breaks, walks); logging as the Pet app does |
 | `home_upkeep_due`, `home_add_event` | Upkeep jobs due and regular events; a new regular event (EventRule) or a booked visit |
-| `add_appointment` | Pet, baby or car: in that app's list, on the household calendar (`private` keeps it from helpers and kids). Health: a visit in Health (kind, doctor, place or video link, what to bring, reminders, follow-up; notes only from admins and member carers); its calendar item and reminders reach only the person's carers, the person and the admins |
+| `add_appointment` | Pet, baby or car: in that app's list, on the household calendar (`private` keeps it from helpers and kids). Health: a visit in Health (kind, doctor, place or video link, what to bring, reminders, follow-up, `specialty` (medical area) and `condition` it is about; the condition and notes only from admins and member carers); its calendar item and reminders reach only the person's carers, the person and the admins |
 | `contacts_search`, `contacts_add` | The household's shared contacts |
 | `health_people` | The people this person looks after in Health |
 | `health_medicines` | Strength, dose, schedule, prescriber, pharmacy, supply and days left, refills, notes, allergies |
@@ -45,8 +45,10 @@ same key writes nothing new.
 | `health_due` | Today's doses, as-needed availability, refills running low |
 | `health_log_dose` | Given or skipped, with Health's double-dose and as-needed guards (it asks before overriding) |
 | `health_add_medicine`, `health_update_medicine` | Add or change a medicine, stop or restart it, count the supply, mark a refill ordered |
-| `health_doctor_list` | Health's printable medicine list, as Markdown |
-| `health_appointments` | A person's visits, coming up and past (attended or missed), with doctor (a doctor marked private only for admins and members), place, prep, reminders and follow-up; notes only for admins and member carers |
+| `health_doctor_list` | Health's printable medicine list, as Markdown, with the person's current conditions for admins and member carers |
+| `health_appointments` | A person's visits, coming up and past (attended or missed), with doctor (a doctor marked private only for admins and members), place, prep, reminders, follow-up and medical area; the condition it is about and the notes only for admins and member carers |
+| `health_conditions` | A person's (or everyone's) conditions grouped by medical area, optionally one area ("Nan's neurology conditions"): ICD-10-CM code, status, when diagnosed, by whom and where, severity, the medicines that treat it, notes. Admins and member carers only (the person too, when a member); helper carers get none |
+| `health_add_condition` | Add a condition (admins and member carers), filed under its ICD-10-CM code's medical area, else its name's, unless `specialty` says |
 
 There are no delete tools. Every Health answer ends with a one-line note: these are the
 household's own records, not medical advice.
