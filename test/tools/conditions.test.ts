@@ -53,6 +53,9 @@ describe('health_conditions', () => {
     for (const c of [helen, carol, kim, mallory]) {
       await expect(c.db.get(`${NAN}/conditions/k1`)).rejects.toMatchObject({ code: 'permission-denied' });
       await expect(c.db.query(NAN, 'conditions')).rejects.toMatchObject({ code: 'permission-denied' });
+      // Writes too: a forged diagnosis, or an overwrite of a real one, never lands.
+      await expect(c.db.commit([{ path: `${NAN}/conditions/forged`, set: example({ name: 'Example forged', by: c.props.email ?? ALICE }) }])).rejects.toMatchObject({ code: 'permission-denied' });
+      await expect(c.db.commit([{ path: `${NAN}/conditions/k1`, set: example({ name: 'Example forged', by: c.props.email ?? ALICE }) }])).rejects.toMatchObject({ code: 'permission-denied' });
     }
   });
 
@@ -74,7 +77,7 @@ describe('health_add_condition', () => {
     expect(again.data).toMatchObject({ id: r.data.id, repeated: true });
   });
 
-  test('a helper carer and a non-carer member are refused; nothing is written', async () => {
+  test('a helper carer, a non-carer member, a kid and an outsider are refused; nothing is written', async () => {
     for (const c of [helen, carol, kim, mallory]) {
       const r = await call(c, 'health_add_condition', { person: 'Nan', name: 'Example refused' });
       expect(r.isError).toBe(true);
@@ -92,17 +95,19 @@ describe('health_add_condition', () => {
     expect((await call(helen, 'add_appointment', { app: 'health', person: 'Nan', title: 'Example', start: '2031-01-12T11:00', condition: 'Example condition' })).isError).toBe(true);
     // What Helen reads straight from Firestore (the visit, the calendar item, the reminders) holds no condition.
     const id = (await call(bob, 'health_appointments', { person: 'Nan' })).data.visits.find((v: { title: string }) => v.title === 'Example check').id;
-    const published = [
-      await helen.db.get(`${NAN}/visits/${id}`),
-      ...(await owner.query('households/h1', 'personalAgenda', { where: [{ field: 'ref', op: 'EQUAL', value: `visit:nan:${id}` }] })),
-      ...(await owner.query('households/h1', 'personalReminders', { where: [{ field: 'ref', op: 'EQUAL', value: `health:visit:${id}` }] })),
-    ];
+    const agenda = await owner.query('households/h1', 'personalAgenda', { where: [{ field: 'ref', op: 'EQUAL', value: `visit:nan:${id}` }] });
+    const reminders = await owner.query('households/h1', 'personalReminders', { where: [{ field: 'ref', op: 'EQUAL', value: `health:visit:${id}` }] });
+    expect(agenda).toHaveLength(1);
+    expect(agenda[0].data.audience).toContain(HELEN);
+    expect(reminders.length).toBeGreaterThan(0);
+    for (const x of reminders) expect(x.data.recipients).toContain(HELEN);
+    const published = [await helen.db.get(`${NAN}/visits/${id}`), ...agenda, ...reminders];
     expect(JSON.stringify(published)).not.toMatch(/Example condition|A00\.0|Examplamine/);
   });
 
   test('the logs say which tool and how it went, never the diagnosis, code, area or person', async () => {
-    await Promise.all([alice.settled(), bob.settled(), helen.settled(), carol.settled(), kim.settled()]);
-    const logs = JSON.stringify([...alice.logs, ...bob.logs, ...helen.logs, ...carol.logs, ...kim.logs]);
+    await Promise.all([alice, bob, helen, carol, kim, mallory].map((c) => c.settled()));
+    const logs = JSON.stringify([...alice.logs, ...bob.logs, ...helen.logs, ...carol.logs, ...kim.logs, ...mallory.logs]);
     expect(logs).not.toMatch(/Example|M54|J45|A00|neurology|pulmonology|Nan|Dr\. Example|@/);
   });
 });
