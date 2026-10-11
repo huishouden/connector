@@ -19,9 +19,11 @@ person**. It never uses a service account.
 ## Tools
 
 Every tool takes an optional `household` (the default is the one the apps open), `lang` (`en`, `es`
-or `nl`; the default is the person's Huishouden language) and `time_zone` (the default is the one in
-their profile). Answers are short Markdown in that language, with deep links into the apps. They
-also come back as structured data. Writing tools take an optional `idempotency_key`: a retry with the
+or `nl`; the default is the person's Huishouden language, the one they set in the apps,
+`households/{id}.langs`) and `time_zone` (the default is the one in their profile). Answers are
+short Markdown in that language, with deep links into the apps. They also come back as structured
+data. What a tool publishes (a Health visit's agenda item and reminders) is written in that
+language, with `texts` only for its readers' other languages. Writing tools take an optional `idempotency_key`: a retry with the
 same key writes nothing new.
 
 | Tool | Does |
