@@ -5,6 +5,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { UnauthorizedError, type OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { exchangeRefreshToken } from '@huishouden/pwa-kit/firebase-auth-rest';
+import { TOOLS } from '@huishouden/pwa-kit/household-tools';
 import { ALICE, BOB, CAROL, PROJECT } from '../fixtures/household';
 import { AUTH, AUTH_HOST, FIRESTORE_URL, read, seed, signIn } from '../helpers';
 
@@ -176,7 +177,7 @@ describe('an assistant signed in as a member', () => {
 
   test('lists the tools', async () => {
     const { tools } = await alice.client.listTools();
-    expect(tools.length).toBe(32);
+    expect(tools.length).toBe(TOOLS.length);
     expect(tools.map((t) => t.name)).toContain('health_medicines');
     expect(tools.map((t) => t.name)).toContain('health_appointments');
   });
