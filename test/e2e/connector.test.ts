@@ -176,7 +176,7 @@ describe('an assistant signed in as a member', () => {
 
   test('lists the tools', async () => {
     const { tools } = await alice.client.listTools();
-    expect(tools.length).toBe(30);
+    expect(tools.length).toBe(32);
     expect(tools.map((t) => t.name)).toContain('health_medicines');
     expect(tools.map((t) => t.name)).toContain('health_appointments');
   });
