@@ -11,8 +11,8 @@ const opened: Connected[] = [];
 
 async function connectWith(limits: ReadLimits, used: { connection?: number; connector?: number } = {}) {
   const store = memoryStore();
-  if (used.connector) await store.add(DAY, 'others', used.connector);
-  if (used.connection) await store.add(DAY, `test${ALICE.split('@')[0]}`, used.connection);
+  if (used.connector) await store.addFor(DAY, 'others', used.connector);
+  if (used.connection) await store.addFor(DAY, `test${ALICE.split('@')[0]}`, used.connection);
   const meter = new ReadMeter(store, limits, `test${ALICE.split('@')[0]}`, () => NOW);
   const c = await connect(ALICE, { reads: meter });
   opened.push(c);
@@ -52,7 +52,7 @@ describe('read budgets with the tools', () => {
 
   test("at all connections' budget, in the grant's language", async () => {
     const store = memoryStore();
-    await store.add(DAY, 'others', 5000);
+    await store.addFor(DAY, 'others', 5000);
     const meter = new ReadMeter(store, { connector: 5000, connection: 1000 }, `test${ALICE.split('@')[0]}`, () => NOW);
     const c = await connect(ALICE, { reads: meter, lang: 'nl' });
     opened.push(c);

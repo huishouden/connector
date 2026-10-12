@@ -52,7 +52,8 @@ export async function quotaResult(scope: QuotaScope, lang: Lang, now: number): P
   await loadLang(lang);
   return {
     text: withLang(lang, () => t(`quota.${scope}`)),
-    data: { error: 'firestore-quota', scope, resetsAt: new Date(nextPacificMidnight(now)).toISOString() },
+    // A call's own cap resets with the next call; the others at midnight Pacific.
+    data: { error: 'firestore-quota', scope, ...(scope === 'call' ? {} : { resetsAt: new Date(nextPacificMidnight(now)).toISOString() }) },
     error: true,
   };
 }

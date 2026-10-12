@@ -73,11 +73,14 @@ export interface Connected {
 }
 
 /** An MCP client talking to the connector's server as `email`, through the emulators, at NOW. */
-export async function connect(email: string, { now = NOW, lang, timeZone, reads }: { now?: number; lang?: GrantProps['lang']; timeZone?: string; reads?: ReadMeter } = {}): Promise<Connected> {
+export async function connect(
+  email: string,
+  { now = NOW, lang, timeZone, reads, fetch: meter }: { now?: number; lang?: GrantProps['lang']; timeZone?: string; reads?: ReadMeter; fetch?: (inner: (url: string, init?: RequestInit) => Promise<Response>) => (url: string, init?: RequestInit) => Promise<Response> } = {},
+): Promise<Connected> {
   const { uid, refreshToken } = await signIn(email);
   const props: GrantProps = { uid, email, refreshToken, connectionId: `test${email.split('@')[0]}`, client: 'Test assistant', ...(lang ? { lang } : {}), ...(timeZone ? { timeZone } : {}) };
   const cache = new IdTokenCache((r) => exchangeRefreshToken(AUTH, r));
-  const db = new FirestoreRest({ projectId: PROJECT, token: async () => (await cache.get(refreshToken)).token, baseUrl: FIRESTORE_URL, ...(reads ? { fetch: reads.fetch((url, init) => fetch(url, init)) } : {}) });
+  const db = new FirestoreRest({ projectId: PROJECT, token: async () => (await cache.get(refreshToken)).token, baseUrl: FIRESTORE_URL, ...(reads ? { fetch: reads.fetch((url, init) => fetch(url, init)) } : meter ? { fetch: meter((url, init) => fetch(url, init)) } : {}) });
   const pending: Promise<void>[] = [];
   const session = new Session(sessionProps(props), db, 'https://huishouden-staging.web.app', () => now, (h, entry) => pending.push(writeAudit(db, props, h, entry, now)));
   const logs: ToolCallLog[] = [];

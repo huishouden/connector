@@ -122,18 +122,23 @@ The calendar feed reuses the same modules.
     (`hh data` leaves it out: the person is typing.)
 - **Rate limits:** each connected assistant may make 60 tool calls and 20 writes a minute (Workers
   Rate Limiting bindings).
-- **Daily read budgets:** Firestore's free plan has 50,000 reads a day for every app and Worker
-  together, and at that limit every read fails until midnight Pacific. The connector may use
-  `FIRESTORE_CONNECTOR_READS` of them a day (4,000) and each connection `FIRESTORE_CONNECTION_READS`
-  (1,000), counted per Pacific day in the `ReadBudget` Durable Object (`src/reads.ts`,
-  `src/read-budget.ts`). A read is counted as pwa-kit `docs/one-site.md` "Budgets" defines it. A call
-  over either budget, or one that meets Firestore's own quota, answers `firestore-quota`, as the
-  calendar Worker's API does: an error result whose data is `{ error: 'firestore-quota', scope:
-  'connection' | 'connector' | 'project', resetsAt }`, with text in the person's language. A budget
-  met mid-call refuses the call's later reads and writes, and the whole answer is the quota's. A
-  write already saved keeps its own answer. A request's tool calls run one at a time. Reads a call makes at once all go out before any is counted, so the day
+- **Read budgets:** Firestore's free plan has 50,000 reads a day for every app and Worker
+  together, and at that limit every read fails until midnight Pacific. The connector runs every
+  tool call on the kit's `ReadBudget` (pwa-kit STANDARD.md "Read budgets", which allocates the day):
+  a call may be billed for at most 500 reads (`CALL_READS`), the connector `FIRESTORE_CONNECTOR_READS`
+  a day (4,000) and each connection `FIRESTORE_CONNECTION_READS` (1,000), counted per Pacific day in
+  the `ReadBudget` Durable Object (the kit's SQLite ledger; `src/reads.ts`, `src/read-budget.ts`). A
+  read is counted as Firestore bills it, from each answer (the kit's `billedReads`). A call over any
+  budget, or one that meets Firestore's own quota, answers `firestore-quota`, as the calendar Worker's
+  API does: an error result whose data is `{ error: 'firestore-quota', scope: 'call' | 'connection' |
+  'connector' | 'project', resetsAt }` (no `resetsAt` for `call`: the next call starts afresh), with
+  text in the person's language. Firestore's own quota also pauses every call for 15 minutes, which
+  answer `project` without reading. A budget met mid-call refuses the call's later reads and writes,
+  and the whole answer is the quota's. A write already saved keeps its own answer. A request's tool
+  calls run one at a time. Reads a call makes at once all go out before any is counted, so the day
   can end a call's reads over. Unset or `0`: no limit. If the Durable Object can't be reached, calls
-  go ahead uncounted and a `read-budget` log line says so.
+  go ahead uncounted and a `read-budget` log line says so. Each read tool has a read-budget test on
+  the fixture household (`test/tools/budgets.test.ts`); a new read tool fails it until it has one.
 - **Audit:** each tool call is written, as the person, to
   `households/{id}/connections/{connection}/audit`: the tool, read or write, whether it worked, the
   app and record. Only that person can read it. The portal shows it under each connected assistant,

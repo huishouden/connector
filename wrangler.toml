@@ -44,7 +44,7 @@ new_sqlite_classes = ["ReadBudget"]
 FIREBASE_PROJECT_ID = "huishouden-piekstra"
 SITE_URL = "https://huishouden-piekstra.web.app"
 # Firestore reads a day the connector may use, of the free plan's 50,000 shared with every app and
-# Worker (pwa-kit docs/one-site.md "Budgets"), and one connection's share of that. Over either, a
+# Worker (pwa-kit STANDARD.md "Read budgets"), and one connection's share of that. Over either, a
 # tool call answers `firestore-quota` until midnight Pacific (src/reads.ts).
 FIRESTORE_CONNECTOR_READS = "4000"
 FIRESTORE_CONNECTION_READS = "1000"

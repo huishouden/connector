@@ -13,6 +13,7 @@ const nl: Record<keyof typeof en, string> = {
   'consent.error': 'Dit verbindingsverzoek kan niet worden gebruikt: {reason}. Begin opnieuw vanuit je assistent.',
   'consent.expired': 'Deze pagina is verlopen of in een andere browser geopend. Begin opnieuw vanuit je assistent.',
 
+  'quota.call': 'Dat verzoek zou meer gegevens van het huishouden lezen dan één verzoek mag. Vraag minder tegelijk: één lijst, of een kortere periode.',
   'quota.connection': 'Deze assistent heeft zijn deel van Huishouden voor vandaag gebruikt. Dat begint opnieuw om middernacht Pacific-tijd; de apps blijven intussen gewoon werken.',
   'quota.connector': 'AI-assistenten hebben hun deel van Huishouden voor vandaag gebruikt. Dat begint opnieuw om middernacht Pacific-tijd; de apps blijven intussen gewoon werken.',
   'quota.project': 'Huishouden heeft zijn gratis dagelijkse tegoed gebruikt en kan tot middernacht Pacific-tijd niets lezen. Probeer het daarna opnieuw.',

@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FirestoreError, FirestoreRest } from '@huishouden/pwa-kit/firestore-rest';
-import { billedReads, nextPacificMidnight, pacificDay, ReadMeter, readLimit, readLimits, type ReadStore } from '../../src/reads';
+import { billedReads, nextPacificMidnight, pacificDay, ReadMeter, readLimit, readLimits, CALL_READS, scopeOf } from '../../src/reads';
+import type { ReadLedger } from '@huishouden/pwa-kit/read-budget';
 import { memoryStore } from '../memory-store';
 import { overQuota, quotaResult } from '../../src/mcp';
 
@@ -92,8 +93,8 @@ const NOW = Date.UTC(2031, 0, 7, 15);
 const DAY = pacificDay(NOW);
 
 async function meterWith(used: { connector?: number; connection?: number }, limits: { connector: number; connection: number }, store = memoryStore()) {
-  if (used.connector) await store.add(DAY, 'other', used.connector - (used.connection ?? 0));
-  if (used.connection) await store.add(DAY, 'c1', used.connection);
+  if (used.connector) await store.addFor(DAY, 'other', used.connector - (used.connection ?? 0));
+  if (used.connection) await store.addFor(DAY, 'c1', used.connection);
   return { store, meter: new ReadMeter(store, limits, 'c1', () => NOW) };
 }
 
@@ -159,29 +160,60 @@ describe('the meter', () => {
 
   test('an earlier day is forgotten; a new day starts at nothing', async () => {
     const store = memoryStore();
-    await store.add('2031-01-06', 'c1', 50);
-    await store.add(DAY, 'c1', 1);
+    await store.addFor('2031-01-06', 'c1', 50);
+    await store.addFor(DAY, 'c1', 1);
     expect([...store.days.keys()]).toEqual([DAY]);
     expect(await new ReadMeter(store, { connector: 100, connection: 50 }, 'c1', () => NOW).begin()).toBeNull();
   });
 
   test('the ledger unreachable: the call goes ahead, and the failure is reported', async () => {
-    const broken: ReadStore = { used: async () => Promise.reject(new Error('down')), add: async () => Promise.reject(new Error('down')) };
+    const broken: ReadLedger = { read: async () => Promise.reject(new Error('down')), add: async () => Promise.reject(new Error('down')), pause: async () => {} };
     const errors: unknown[] = [];
     const meter = new ReadMeter(broken, { connector: 10, connection: 5 }, 'c1', () => NOW, (e) => errors.push(e));
     expect(await meter.begin()).toBeNull();
-    meter.reads = 3;
+    const db = new FirestoreRest({ projectId: 'p', token: async () => 't', baseUrl: 'https://firestore.example/v1', fetch: meter.fetch(firestore(3).fetch) });
+    await db.query('households/h', 'todos');
     await meter.finish();
     expect(errors).toHaveLength(2);
+  });
+
+  test("a call's own cap (CALL_READS): the rest of the call is refused, the next call starts afresh", async () => {
+    const { meter } = await meterWith({}, { connector: Infinity, connection: Infinity });
+    const fs = firestore(CALL_READS);
+    const db = new FirestoreRest({ projectId: 'p', token: async () => 't', baseUrl: 'https://firestore.example/v1', fetch: meter.fetch(fs.fetch) });
+    expect(await meter.begin()).toBeNull();
+    await db.query('households/h', 'transactions');
+    expect(overQuota(await db.query('households/h', 'transactions').catch((e: unknown) => e))).toBe(true);
+    expect(meter.refused).toBe('call');
+    expect(fs.calls).toHaveLength(1);
+    expect(await meter.begin()).toBeNull();
+    expect(meter.refused).toBeNull();
+  });
+
+  test("Firestore's quota pauses every call for 15 minutes: they answer the project's quota without reading", async () => {
+    const store = memoryStore();
+    const meter = new ReadMeter(store, { connector: 100, connection: 50 }, 'c1', () => NOW);
+    const db = new FirestoreRest({ projectId: 'p', token: async () => 't', baseUrl: 'https://firestore.example/v1', fetch: meter.fetch(firestore(1, { status: 429 }).fetch) });
+    await meter.begin();
+    await db.get('households/h').catch(() => null);
+    expect(await new ReadMeter(store, { connector: 100, connection: 50 }, 'c2', () => NOW + 60_000).begin()).toBe('project');
+    expect(await new ReadMeter(store, { connector: 100, connection: 50 }, 'c2', () => NOW + 16 * 60_000).begin()).toBeNull();
   });
 });
 
 describe('the answer', () => {
+  test("a refusal's scope: the call's cap, each share, and the project's quota for anything else", () => {
+    expect(['run', 'connection', 'connector', 'paused', 'project', 'something-new'].map(scopeOf)).toEqual(['call', 'connection', 'connector', 'project', 'project', 'project']);
+  });
+
   test('`firestore-quota`, which budget, when it resets, in the person\'s language', async () => {
     const en = await quotaResult('connection', 'en', NOW);
     expect(en).toMatchObject({ error: true, data: { error: 'firestore-quota', scope: 'connection', resetsAt: '2031-01-08T08:00:00.000Z' } });
     expect(en.text).toContain('midnight Pacific');
     expect((await quotaResult('connector', 'nl', NOW)).text).toContain('middernacht');
     expect((await quotaResult('project', 'es', NOW)).text).toContain('medianoche');
+    const call = await quotaResult('call', 'en', NOW);
+    expect(call.data).toEqual({ error: 'firestore-quota', scope: 'call' });
+    expect(call.text).toContain('Ask for less at a time');
   });
 });

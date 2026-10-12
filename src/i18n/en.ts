@@ -15,6 +15,7 @@ export default {
   'consent.expired': 'This page has expired or was opened in another browser. Start again from your assistant.',
 
   // A tool call refused for Firestore reads (src/reads.ts): the answer's text, `firestore-quota` in its data.
+  'quota.call': 'That request would read more of the household\'s data than one request may. Ask for less at a time: one list, or a shorter period.',
   'quota.connection': 'This assistant has used its share of Huishouden for today. It resets at midnight Pacific time; the apps keep working meanwhile.',
   'quota.connector': 'AI assistants have used their share of Huishouden for today. It resets at midnight Pacific time; the apps keep working meanwhile.',
   'quota.project': 'Huishouden has used its free daily allowance and can\'t read anything until midnight Pacific time. Try again after that.',

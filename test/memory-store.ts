@@ -1,20 +1,35 @@
-import type { ReadStore } from '../src/reads';
+import { memoryLedger, type ReadLedger } from '@huishouden/pwa-kit/read-budget';
 
-/** The day's reads in memory, for tests: the ReadBudget Durable Object's behaviour, without it. */
-export function memoryStore(): ReadStore & { days: Map<string, Map<string, number>> } {
-  const days = new Map<string, Map<string, number>>();
-  const of = (day: string) => days.get(day) ?? days.set(day, new Map()).get(day)!;
+/**
+ * The day's reads in memory, for tests: the ReadBudget Durable Object's ledger (the kit's), without
+ * it. `addFor` and `used` speak of one connection and all of them (`*`), as the meter counts.
+ */
+export function memoryStore(): ReadLedger & {
+  days: Set<string>;
+  used(day: string, connection: string): Promise<{ connector: number; connection: number }>;
+  addFor(day: string, connection: string, reads: number): Promise<void>;
+} {
+  const ledger = memoryLedger();
+  const days = new Set<string>();
   return {
     days,
-    async used(day, connection) {
-      const d = of(day);
-      return { connector: d.get('*') ?? 0, connection: d.get(connection) ?? 0 };
+    read: ledger.read,
+    pause: ledger.pause,
+    async add(day, keys, reads) {
+      // As the Durable Object does: an earlier day goes when a new one is added to.
+      for (const d of [...days]) if (d < day) {
+        days.delete(d);
+        for (const k of [...ledger.counts.keys()]) if (k.startsWith(`${d}|`)) ledger.counts.delete(k);
+      }
+      days.add(day);
+      await ledger.add(day, keys, reads);
     },
-    async add(day, connection, reads) {
-      for (const k of [...days.keys()]) if (k < day) days.delete(k);
-      const d = of(day);
-      d.set('*', (d.get('*') ?? 0) + reads);
-      d.set(connection, (d.get(connection) ?? 0) + reads);
+    async used(day, connection) {
+      const { used } = await ledger.read(day, ['*', connection]);
+      return { connector: used['*'], connection: used[connection] };
+    },
+    async addFor(day, connection, reads) {
+      await this.add(day, ['*', connection], reads);
     },
   };
 }
