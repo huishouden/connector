@@ -25,7 +25,7 @@ describe('groceries', () => {
     expect(r.isError).toBe(false);
     const item = await read(`households/h1/items/${r.data.id}`);
     expect(item!.data).toEqual({
-      listId: 'groceries', name: 'Oat milk', category: 'Dairy & Eggs', quantity: '2', notes: '', addedBy: 'Helen', by: HELEN, completed: false, urgency: 'Need Today', position: -NOW - 1e13, createdAt: NOW, updatedAt: NOW, completedAt: null, via: 'assistant',
+      listId: 'groceries', name: 'Oat milk', category: 'Dairy & Eggs', quantity: '2', notes: '', addedBy: 'Helen', by: HELEN, completed: false, urgency: 'Need Today', needBy: '2031-01-07', position: -NOW - 1e13, createdAt: NOW, updatedAt: NOW, completedAt: null, via: 'assistant',
     });
     expect((await read('households/h1/staples/oat milk'))!.data).toMatchObject({ displayName: 'Oat milk', timesAdded: 1 });
     const again = await call(helen, 'groceries_add', args);
@@ -41,6 +41,21 @@ describe('groceries', () => {
     expect((await read('households/h1/items/milk'))!.data).toMatchObject({ completed: true, completedAt: NOW });
     expect((await call(kim, 'groceries_check', { item: 'milk', bought: false })).isError).toBe(false);
     expect((await read('households/h1/items/milk'))!.data).toMatchObject({ completed: false, completedAt: null });
+  });
+});
+
+describe('groceries_update', () => {
+  test('sets the day an item is needed by, with Standard for older apps, and clears it', async () => {
+    const r = await call(alice, 'groceries_update', { item: 'milk', need_by: '2031-01-09' });
+    expect(r.isError).toBe(false);
+    expect((await read('households/h1/items/milk'))!.data).toMatchObject({ needBy: '2031-01-09', urgency: 'Standard', updatedAt: NOW });
+    expect((await call(alice, 'groceries_update', { item: 'Milk', need_by: 'none' })).isError).toBe(false);
+    expect((await read('households/h1/items/milk'))!.data).toMatchObject({ needBy: null, urgency: 'Standard' });
+  });
+
+  test('a day that has passed is refused; a kid may not change a member\'s item', async () => {
+    expect((await call(alice, 'groceries_update', { item: 'milk', need_by: '2031-01-01' })).isError).toBe(true);
+    expect((await call(kim, 'groceries_update', { item: 'milk', need_by: '2031-01-09' })).isError).toBe(true);
   });
 });
 
