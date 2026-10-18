@@ -34,7 +34,8 @@ same key writes nothing new.
 | `calendar` | The household calendar between two days, by day |
 | `todos` | Open to-dos from every app, with ids, filters and sorts, and whether this person may act on each |
 | `todo_done`, `todo_cancel` | Run a to-do's Done or Cancel action exactly as the portal does (kit `todoActionOps` and `planTodo`) |
-| `groceries_list`, `groceries_add`, `groceries_check` | Shopping lists, in the Groceries app's shapes (including staples) |
+| `groceries_list`, `groceries_add`, `groceries_check` | Shopping lists, in the Groceries app's shapes (including staples and each item's need-by day, `need_by`); adding with "Need Today" writes today's day too |
+| `groceries_update` | Change an item still to buy: the day it is needed by (or none), Standard or Whenever, quantity or notes. Helpers and kids change only the items they added |
 | `tasks_add` | A task, with an optional due date or time |
 | `bills_due` | Open bills, amounts, due dates, autopay and pay links (admins and members only) |
 | `pet_today`, `pet_log_feeding`, `pet_log_dose`, `pet_log_outing` | The feeding board, care reminders, medicine courses and outings (bathroom breaks, walks); logging as the Pet app does |

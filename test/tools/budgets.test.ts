@@ -60,20 +60,23 @@ describe('each read tool within its budget', () => {
 
 // Write tools that find an item first: what finding it is billed for. By name, the open items on the
 // shopping lists only, not Tasks' to-dos (an id costs one read; the kit's own test counts that).
-const FINDING: [string, Record<string, unknown>, number][] = [
-  ['groceries_update', { item: 'Milk', need_by: '2031-01-09' }, 6],
-  ['groceries_check', { item: 'Milk' }, 6],
+// A miss reads no more than a hit, and a name that is only one of Tasks' to-dos isn't found.
+const FINDING: [string, Record<string, unknown>, number, 'found' | 'missing'][] = [
+  ['groceries_update', { item: 'Milk', need_by: '2031-01-09' }, 6, 'found'],
+  ['groceries_check', { item: 'Milk' }, 6, 'found'],
+  ['groceries_check', { item: 'Saffron' }, 6, 'missing'],
+  ['groceries_check', { item: 'Clean the gutters' }, 6, 'missing'],
 ];
 
 describe('write tools that find an item, within their budget', () => {
-  for (const [name, args, max] of FINDING) {
+  for (const [name, args, max, outcome] of FINDING) {
     test(`${name} ${JSON.stringify(args)}`, async () => {
       await expectReads(
         async (meter) => {
           const c = await connect(ALICE, { fetch: meter });
           opened.push(c);
           const r = await call(c, name, args);
-          expect(r.isError).toBe(false);
+          expect(r.isError).toBe(outcome === 'missing');
         },
         { max, label: name },
       );
