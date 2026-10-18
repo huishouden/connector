@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { ALICE, HELEN, KIM, NOW } from '../fixtures/household';
+import { ALICE, BOB, HELEN, KIM, NOW } from '../fixtures/household';
 import { call, connect, owner, read, seed, type Connected } from '../helpers';
 
-let alice: Connected, helen: Connected, kim: Connected;
+let alice: Connected, bob: Connected, helen: Connected, kim: Connected;
 beforeAll(async () => {
   await seed();
-  [alice, helen, kim] = await Promise.all([ALICE, HELEN, KIM].map((e) => connect(e)));
+  [alice, bob, helen, kim] = await Promise.all([ALICE, BOB, HELEN, KIM].map((e) => connect(e)));
 });
 afterAll(async () => {
-  for (const c of [alice, helen, kim]) await c.close();
+  for (const c of [alice, bob, helen, kim]) await c.close();
 });
 
 describe('groceries', () => {
@@ -25,7 +25,7 @@ describe('groceries', () => {
     expect(r.isError).toBe(false);
     const item = await read(`households/h1/items/${r.data.id}`);
     expect(item!.data).toEqual({
-      listId: 'groceries', name: 'Oat milk', category: 'Dairy & Eggs', quantity: '2', notes: '', addedBy: 'Helen', by: HELEN, completed: false, urgency: 'Need Today', position: -NOW - 1e13, createdAt: NOW, updatedAt: NOW, completedAt: null, via: 'assistant',
+      listId: 'groceries', name: 'Oat milk', category: 'Dairy & Eggs', quantity: '2', notes: '', addedBy: 'Helen', by: HELEN, completed: false, urgency: 'Need Today', needBy: '2031-01-07', position: -NOW - 1e13, createdAt: NOW, updatedAt: NOW, completedAt: null, via: 'assistant',
     });
     expect((await read('households/h1/staples/oat milk'))!.data).toMatchObject({ displayName: 'Oat milk', timesAdded: 1 });
     const again = await call(helen, 'groceries_add', args);
@@ -41,6 +41,40 @@ describe('groceries', () => {
     expect((await read('households/h1/items/milk'))!.data).toMatchObject({ completed: true, completedAt: NOW });
     expect((await call(kim, 'groceries_check', { item: 'milk', bought: false })).isError).toBe(false);
     expect((await read('households/h1/items/milk'))!.data).toMatchObject({ completed: false, completedAt: null });
+  });
+});
+
+describe('groceries_update', () => {
+  test('the admin sets the day an item is needed by, with Standard for older apps, and clears it', async () => {
+    const r = await call(alice, 'groceries_update', { item: 'milk', need_by: '2031-01-09' });
+    expect(r.isError).toBe(false);
+    expect((await read('households/h1/items/milk'))!.data).toMatchObject({ needBy: '2031-01-09', urgency: 'Standard', updatedAt: NOW });
+    expect((await call(alice, 'groceries_update', { item: 'Milk', need_by: 'none' })).isError).toBe(false);
+    expect((await read('households/h1/items/milk'))!.data).toMatchObject({ needBy: null, urgency: 'Standard' });
+  });
+
+  test("a member changes someone else's item, which stays signed by whoever added it", async () => {
+    expect((await call(bob, 'groceries_update', { item: 'milk', need_by: '2031-01-10' })).isError).toBe(false);
+    expect((await read('households/h1/items/milk'))!.data).toMatchObject({ needBy: '2031-01-10', by: ALICE, addedBy: 'Alice' });
+  });
+
+  test("a helper and a kid change their own items, not someone else's; a refusal changes nothing and says why", async () => {
+    const before = (await read('households/h1/items/milk'))!.data;
+    for (const who of [helen, kim]) {
+      const r = await call(who, 'groceries_update', { item: 'milk', need_by: '2031-01-09' });
+      expect(r.isError).toBe(true);
+      expect(r.text).toContain('Your role can only change the items you added');
+    }
+    expect((await read('households/h1/items/milk'))!.data).toEqual(before);
+
+    const added = await call(helen, 'groceries_add', { name: 'Dish soap', idempotency_key: 'helen-soap' });
+    const r = await call(helen, 'groceries_update', { item: added.data.id, need_by: '2031-01-09' });
+    expect(r.isError).toBe(false);
+    expect((await read(`households/h1/items/${added.data.id}`))!.data).toMatchObject({ needBy: '2031-01-09', by: HELEN });
+  });
+
+  test('a day that has passed is refused before anything is written', async () => {
+    expect((await call(alice, 'groceries_update', { item: 'milk', need_by: '2031-01-01' })).isError).toBe(true);
   });
 });
 
